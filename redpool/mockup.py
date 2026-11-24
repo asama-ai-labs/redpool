@@ -11,6 +11,7 @@ Redfish-Mockup-Creator and served by Redfish-Mockup-Server.
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
+from typing import Iterator
 
 INDEX = "index.json"
 
@@ -31,3 +32,17 @@ def relpath_to_uri(rel: Path) -> str:
 def iter_mockup_files(root: Path):
     """Yield every ``index.json`` under a mockup root, sorted."""
     yield from sorted(Path(root).rglob(INDEX))
+
+
+def iter_fixture_models(
+    fixtures: Path, *, vendor: str | None = None, model: str | None = None
+) -> Iterator[Path]:
+    """Yield model directories with optional case-insensitive name filters."""
+    for path in sorted(fixtures.glob("*/*")):
+        if not path.is_dir() or path.parent.name.startswith("."):
+            continue
+        if vendor and path.parent.name.lower() != vendor.lower():
+            continue
+        if model and path.name.lower() != model.lower():
+            continue
+        yield path

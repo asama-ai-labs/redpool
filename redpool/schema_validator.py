@@ -31,6 +31,8 @@ from referencing import Registry, Resource
 from referencing.exceptions import Unresolvable
 from referencing.jsonschema import DRAFT7
 
+from redpool.mockup import iter_fixture_models
+
 _SCHEMA_URI_PREFIX = "http://redfish.dmtf.org/schemas/v1/"
 _SWORDFISH_URI_PREFIX = "http://redfish.dmtf.org/schemas/swordfish/v1/"
 _MAX_ISSUES = 15
@@ -310,22 +312,8 @@ def iter_normalized_documents(
     model: str | None = None,
 ) -> Iterator[Path]:
     """Yield ``fixtures/<Vendor>/<Model>/normalized/**/*.json`` paths."""
-    if vendor:
-        vendor_dirs = [fixtures / vendor]
-    else:
-        vendor_dirs = sorted(p for p in fixtures.iterdir() if p.is_dir())
-    for vendor_dir in vendor_dirs:
-        if not vendor_dir.is_dir():
-            continue
-        if model:
-            model_dirs = [vendor_dir / model]
-        else:
-            model_dirs = sorted(p for p in vendor_dir.iterdir() if p.is_dir())
-        for model_dir in model_dirs:
-            normalized = model_dir / "normalized"
-            if not normalized.is_dir():
-                continue
-            yield from sorted(normalized.rglob("*.json"))
+    for model_dir in iter_fixture_models(fixtures, vendor=vendor, model=model):
+        yield from sorted((model_dir / "normalized").rglob("*.json"))
 
 
 def validate_file(path: Path) -> SchemaResult:

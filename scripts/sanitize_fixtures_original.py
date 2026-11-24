@@ -15,8 +15,8 @@ Each capture's collected identifiers are saved under $REDPOOL_SANITIZE_STATE (de
 
 Add --mask-time to also shift timestamps, set zones to UTC, round manufacture and licence
 dates and scale uptime counters. The shift comes from $REDPOOL_SANITIZE_SECRET and the
-capture's name. Each capture records `time_policy` in its metadata.json and is skipped on
-later runs.
+capture's name. Each capture records the policy version in `metadata.json`. Upgrades apply
+rules that the previous version missed.
 """
 
 from __future__ import annotations

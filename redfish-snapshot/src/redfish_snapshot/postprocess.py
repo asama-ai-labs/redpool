@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
@@ -32,6 +33,7 @@ from redfish_snapshot.sanitize import (
     sanitize_path,
     sanitize_redfish,
     sanitize_resource_tokens,
+    standard_boot_certificate_uri,
 )
 from redfish_snapshot.temporal import TIME_POLICY_VERSION, TemporalMasker
 
@@ -237,25 +239,51 @@ def _rename_changed_paths(root: Path, id_map: dict[str, str], mask_text) -> int:
         if new_rel != rel:
             moves.append((src, root / new_rel))
     moves.sort(key=lambda pair: len(pair[0].parts), reverse=True)
+    destinations = set()
+    for src, dest in moves:
+        if dest in destinations or dest.exists():
+            raise SystemExit(f"path collision: {src} -> {dest}")
+        destinations.add(dest)
     renamed = 0
     for src, dest in moves:
         if not src.exists():
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
-        if dest.exists():
-            raise SystemExit(f"path collision: {src} -> {dest}")
         src.rename(dest)
         renamed += 1
     _remove_empty_dirs(root)
     return renamed
 
 
-def _time_policy_applied(root: Path) -> bool:
+def public_boot_dates(doc: dict) -> dict[str, str]:
+    """Read the published validity interval from the unshifted standard OEM record."""
+    dates = {}
+    if doc.get("SecureBootPolicy") == "Standard":
+        for source, target in (
+            ("ValidFrom", "ValidNotBefore"),
+            ("ValidTo", "ValidNotAfter"),
+        ):
+            try:
+                instant = datetime.strptime(doc[source], "%b %d %H:%M:%S %Y GMT")
+            except (TypeError, KeyError, ValueError):
+                continue
+            dates[target] = instant.isoformat() + "Z"
+    return dates
+
+
+def boot_validity_fields(doc: dict, dates: dict[str, str]):
+    for field, year in (("ValidNotBefore", 2000), ("ValidNotAfter", 2030)):
+        if field in doc:
+            yield field, dates.get(field, f"{year}-01-01T00:00:00Z")
+
+
+def _time_policy_version(root: Path) -> int:
     try:
         meta = json.loads((root.parent / "metadata.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return False
-    return isinstance(meta, dict) and meta.get("time_policy") == TIME_POLICY_VERSION
+        return 0
+    version = meta.get("time_policy") if isinstance(meta, dict) else None
+    return version if type(version) is int else 0
 
 
 def sanitize_mockups(
@@ -278,7 +306,7 @@ def sanitize_mockups(
 
     *mask_time* also masks time zones, timestamps and uptime counters. Each capture gets a
     shift derived from *time_secret* and its name, and a ``time_policy`` marker in its
-    ``metadata.json``; a capture with the marker is skipped, so reruns change nothing.
+    ``metadata.json``. Upgrading a version 1 capture masks the timestamps that version missed.
     """
     roots = [Path(r) for r in roots]
     metadata_files = [Path(m) for m in metadata_files]
@@ -286,6 +314,8 @@ def sanitize_mockups(
         raise ValueError("mask_time needs time_secret")
 
     tokens: set[str] = set()
+    public_dates = {}
+    last_report_number = 0
     identifiers: dict[Path, set[str]] = {}
     for root in roots:
         found = set(extra_identifiers)
@@ -293,7 +323,19 @@ def sanitize_mockups(
             try:
                 raw = p.read_text(encoding="utf-8")
                 tokens.update(_DIRGROUP_RE.findall(raw))
-                found.update(collect_identifiers(json.loads(raw)))
+                for match in re.finditer(
+                    r"/TelemetryService/MetricReport(?:Definitions|s)/DUMMY-Report-(\d+)\b",
+                    raw,
+                ):
+                    last_report_number = max(last_report_number, int(match[1]))
+                doc = json.loads(raw)
+                found.update(collect_identifiers(doc))
+                if isinstance(doc, dict) and (
+                    uri := standard_boot_certificate_uri(doc)
+                ):
+                    public_dates.setdefault((root, uri), {}).update(
+                        public_boot_dates(doc)
+                    )
             except (OSError, json.JSONDecodeError) as e:
                 log(f"SKIP {p}: {e}")
             tokens.update(_DIRGROUP_RE.findall(p.relative_to(root).as_posix()))
@@ -308,6 +350,7 @@ def sanitize_mockups(
         except OSError as e:
             log(f"SKIP {p}: {e}")
     id_map = build_dirgroup_id_map(tokens)
+    id_map["#count:telemetry"] = str(last_report_number)
     maskers = {
         root: IdentifierMasker(found, id_map=id_map)
         for root, found in identifiers.items()
@@ -315,11 +358,15 @@ def sanitize_mockups(
 
     # One time masker per capture, none for a capture that already has the marker.
     time_maskers: dict[Path, TemporalMasker] = {}
+    legacy_timestamps: dict[Path, dict[str, str]] = {}
     if mask_time:
         for root in roots:
-            if _time_policy_applied(root):
+            version = _time_policy_version(root)
+            if version >= TIME_POLICY_VERSION:
                 log(f"  {server_key(root)}: time policy already applied, skipped")
                 continue
+            if version in (1, 2):
+                legacy_timestamps[root] = {}
             capture = "/".join(root.resolve().parent.parts[-2:])
             time_maskers[root] = TemporalMasker(time_secret, capture)
         for root in time_maskers:
@@ -342,8 +389,26 @@ def sanitize_mockups(
         sanitized = _walk(
             sanitize_redfish(data, id_map=id_map), masker.mask, masker.mask_key
         )
+        if isinstance(sanitized, dict) and (
+            uri := standard_boot_certificate_uri(sanitized)
+        ):
+            sanitized.update(
+                boot_validity_fields(sanitized, public_dates.get((root, uri), {}))
+            )
         if root in time_maskers:
-            sanitized = time_maskers[root].mask(sanitized)
+            time_masker = time_maskers[root]
+            if (
+                root in legacy_timestamps
+                and p.name == "index.json"
+                and isinstance(sanitized, dict)
+            ):
+                resource_id = sanitized.get("@odata.id")
+                if isinstance(resource_id, str):
+                    path = "/" + p.parent.relative_to(root).as_posix()
+                    legacy_timestamps[root].update(
+                        time_masker.legacy_path_timestamps(path, resource_id)
+                    )
+            sanitized = time_masker.mask(sanitized, legacy=root in legacy_timestamps)
         if _strip_etags(sanitized) == _strip_etags(data):
             # The body is as it was: keep its etag unless it hashes some other body.
             sanitized = data
@@ -358,7 +423,8 @@ def sanitize_mockups(
         if i % 2000 == 0:
             log(f"  {i}/{len(documents)} documents")
 
-    meta_changed = 0
+    changed_metadata: set[Path] = set()
+    legacy_metadata = {}
     for p in metadata_files:
         try:
             raw = p.read_text(encoding="utf-8")
@@ -378,20 +444,45 @@ def sanitize_mockups(
             ),
         )
         if root in time_maskers:
-            if isinstance(out.get("collection_timestamp"), str):
-                out["collection_timestamp"] = time_maskers[root].collection_date(
+            time_masker = time_maskers[root]
+            if root not in legacy_timestamps and isinstance(
+                out.get("collection_timestamp"), str
+            ):
+                out["collection_timestamp"] = time_masker.collection_date(
                     out["collection_timestamp"]
                 )
-            out["time_policy"] = TIME_POLICY_VERSION
+            if isinstance(out.get("collected_urls"), list):
+                out["collected_urls"] = _walk(
+                    out["collected_urls"],
+                    lambda url: time_masker.shift_path(
+                        url, legacy_timestamps=legacy_timestamps.get(root)
+                    ),
+                )
+            if root in legacy_timestamps:
+                legacy_metadata[p] = (out, raw)
+            else:
+                out["time_policy"] = TIME_POLICY_VERSION
         if out != data:
             p.write_text(_metadata_text(out, raw), encoding="utf-8")
-            meta_changed += 1
+            changed_metadata.add(p)
 
     renamed = 0
     for root in roots:
         masker = maskers[root]
-        shift = time_maskers[root].shift_path if root in time_maskers else str
-        renamed += _rename_changed_paths(
-            root, id_map, lambda text, m=masker, sh=shift: sh(m.mask(text))
-        )
-    return changed, meta_changed, renamed
+        if root in time_maskers:
+            time_masker = time_maskers[root]
+
+            def mask_path(text):
+                return time_masker.shift_path(
+                    masker.mask(text), legacy_timestamps=legacy_timestamps.get(root)
+                )
+        else:
+            mask_path = masker.mask
+        renamed += _rename_changed_paths(root, id_map, mask_path)
+    # Persist repaired URLs before renaming, then mark v1 upgrades complete so
+    # an interrupted rename can be retried using the IDs still in the bodies.
+    for path, (data, raw) in legacy_metadata.items():
+        data["time_policy"] = TIME_POLICY_VERSION
+        path.write_text(_metadata_text(data, raw), encoding="utf-8")
+        changed_metadata.add(path)
+    return changed, len(changed_metadata), renamed

@@ -11,6 +11,116 @@ import re
 from typing import Any, Dict, Iterable, Mapping, Optional
 
 
+# Built-in metric report names in the Dell, iLO, and XCC fixture catalogs.
+_STANDARD_REPORTS = frozenset(
+    """
+AggregationMetrics CPUMemMetrics CPURegisters CPUSensor FCPortStatistics FCSensor
+FPGASensor FanSensor GPUMetrics GPUStatistics MemoryMetrics MemorySensor NICSensor
+NICStatistics NVMeSMARTData PSUMetrics PowerMetrics PowerStatistics SFPTransceiver
+Sensor SerialLog StorageDiskSMARTData StorageSensor SystemUsage ThermalMetrics ThermalSensor
+""".split()
+)
+_STANDARD_REPORTS |= {
+    name + suffix
+    for name in (
+        "AvgCPU0Freq",
+        "AvgCPU1Freq",
+        "CPU0Power",
+        "CPU1Power",
+        "CPUICUtil",
+        "CPUUtil",
+        "IOBusUtil",
+        "JitterCount",
+        "MemoryBusUtil",
+    )
+    for suffix in ("", "Custom1", "Custom2", "Custom3", "Custom4")
+}
+_STANDARD_REPORTS |= {
+    name + suffix
+    for name in (
+        "CPUPowerMetrics",
+        "CPUTemp",
+        "CPUUtilizationStats",
+        "InletAirTemp",
+        "MemoryUtilizationStats",
+        "PowerMetrics",
+        "PowerSupplyStats",
+    )
+    for suffix in ("", "Event")
+}
+_REPORT_PATH = re.compile(
+    r"(/TelemetryService/MetricReport(?:Definitions|s)/)([^/#?\s\"<>]+)"
+)
+_CERT_DATES = {
+    "ValidFrom": 2000,
+    "ValidTo": 2030,
+    "ValidNotBefore": 2000,
+    "ValidNotAfter": 2030,
+    "CertValidFrom": 2000,
+    "CertValidTo": 2030,
+}
+
+
+def _report_path(match, id_map):
+    token = match[2]
+    if token in _STANDARD_REPORTS or re.fullmatch(r"DUMMY-Report-\d+", token):
+        return match[0]
+    alias = RedfishSanitizer._stable_placeholder(
+        id_map, "telemetry", token, lambda n: f"DUMMY-Report-{n}"
+    )
+    return match[1] + alias
+
+
+def standard_boot_certificate_uri(doc: dict) -> str | None:
+    """Canonical URI shared by a Dell standard Secure Boot certificate and its OEM record."""
+    uri = doc.get("@odata.id")
+    if not isinstance(uri, str) or not isinstance(doc.get("Id"), str):
+        return None
+    parts = uri.split("/")
+    if parts[-1] != doc["Id"] or not re.fullmatch(r"StdSecbootpolicy\.\d+", parts[-1]):
+        return None
+    if "/SecureBoot/SecureBootDatabases/" in uri and parts[-2] == "Certificates":
+        # Dell uses "DB" in its OEM path and "db" in the standard resource URI.
+        parts[-3] = parts[-3].lower()
+        return "/".join(parts)
+    if (
+        "/SecureBoot/Oem/Dell/Certificates/" in uri
+        and doc.get("SecureBootPolicy") == "Standard"
+    ):
+        prefix, name = uri.split("/SecureBoot/Oem/Dell/Certificates/", 1)
+        database, sep, cert_id = name.partition("/")
+        if sep and cert_id == doc["Id"]:
+            return f"{prefix}/SecureBoot/SecureBootDatabases/{database.lower()}/Certificates/{cert_id}"
+    return None
+
+
+def certificate_document(doc):
+    return "Certificate" in str(doc.get("@odata.type", "")).split(".", 1)[0]
+
+
+def _mask_certificate_fields(doc):
+    certificate = certificate_document(doc)
+    public = standard_boot_certificate_uri(doc) is not None
+    for key in list(doc):
+        leaf = key.rsplit(".", 1)[-1]
+        attribute = re.fullmatch(r"SecurityCertificate\.\d+\.(.+)", key)
+        if not (certificate or attribute):
+            continue
+        if not public and leaf in _CERT_DATES and doc[key]:
+            doc[key] = f"{_CERT_DATES[leaf]}-01-01T00:00:00Z"
+        if not public and leaf in {
+            "IssuerCountryCode",
+            "SubjectCountryCode",
+            "IssuerCountryCode_CC",
+            "SubjectCountryCode_CC",
+        }:
+            doc.pop(key)
+    if certificate and not public:
+        for party in ("Issuer", "Subject"):
+            if isinstance(doc.get(party), dict):
+                doc[party].pop("Country", None)
+
+
 class RedfishSanitizer:
     """Replace secrets and customer identifiers in Redfish JSON."""
 
@@ -911,6 +1021,7 @@ class RedfishSanitizer:
             return s
         if id_map is None:
             id_map = {}
+        s = _REPORT_PATH.sub(lambda m: _report_path(m, id_map), s)
         if field_name in self.MAC_SUBSTITUTION_KEYS and self._BARE_MAC12_RE.match(
             s.strip()
         ):
@@ -1261,6 +1372,14 @@ class RedfishSanitizer:
     ) -> None:
         """Sanitize the properties of one object in place."""
         container_type = self._odata_container_type(sanitized)
+        _mask_certificate_fields(sanitized)
+        resource = sanitized.get("@odata.id")
+        if isinstance(resource, str) and (report := _REPORT_PATH.search(resource)):
+            if report.end() == len(resource) and report[2] not in _STANDARD_REPORTS:
+                alias = _report_path(report, id_map).rsplit("/", 1)[-1]
+                for field in ("Id", "Name", "Description"):
+                    if sanitized.get(field):
+                        sanitized[field] = alias
         self._mask_session_member_id(sanitized, id_map)
         log_users = self._log_users(sanitized.get("Message"))
         for key in list(sanitized.keys()):

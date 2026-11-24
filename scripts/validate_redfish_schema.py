@@ -11,7 +11,7 @@ schema are skipped. Exit status is 1 when any document is invalid.
 Usage (from the repository root):
 
     uv run --extra dev python scripts/validate_redfish_schema.py
-    uv run --extra dev python scripts/validate_redfish_schema.py --vendor Dell --model PowerEdge_R640
+    uv run --extra dev python scripts/validate_redfish_schema.py --fixtures ../fixtures --vendor Dell --model PowerEdge_R740
     uv run --extra dev python scripts/validate_redfish_schema.py path/to/resource.json
 """
 
@@ -82,7 +82,17 @@ def main() -> int:
     if not schema_bundle_available():
         print(f"schema bundle not found at {schema_dir()}", file=sys.stderr)
         return 2
+    if not args.paths and not args.fixtures.is_dir():
+        print(f"fixtures directory not found: {args.fixtures}", file=sys.stderr)
+        return 2
     paths = _documents(args)
+    if not paths and (args.vendor or args.model):
+        print(
+            f"no normalized JSON documents matched under {args.fixtures}; "
+            "check the filters or run generate_normalized_outputs.py first",
+            file=sys.stderr,
+        )
+        return 2
     counts: Counter[str] = Counter()
     signatures: Counter[str] = Counter()
     oem_invalid = 0

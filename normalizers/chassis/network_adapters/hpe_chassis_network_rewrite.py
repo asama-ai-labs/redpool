@@ -370,6 +370,13 @@ def _hpe_chassis_network_after_200_merge(call: RewriteCall, body: Any) -> Any:
         and "Collection" not in otype
     ):
         body.pop("Settings", None)
+        # Port Settings retains its payload and bypasses the Port member field map.
+        if "LinkStatus" in body:
+            status = canonicalize_port_link_status(body["LinkStatus"])
+            if status is None:
+                del body["LinkStatus"]
+            else:
+                body["LinkStatus"] = status
     cid = _chassis_id_from_network_path(path)
     if client is None or not cid:
         return body

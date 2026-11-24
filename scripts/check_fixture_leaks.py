@@ -18,6 +18,8 @@ Checks, applied to every ``original/`` and ``normalized/`` file, ``metadata.json
   S-B64    base64 that decodes to serial-like text
   S-ETAG   a hash-shaped @odata.etag that is not the hash of its own document
   S-TZ     a time zone, or a UTC offset, that is not UTC
+  S-TIME   inconsistent telemetry clocks, raw power epochs or incorrect certificate validity
+  S-LINK   a collected anonymized telemetry resource has no corresponding file
   S-LEAF   a key that must hold a placeholder but holds a value
   S-RESAN  a capture document, path or metadata URL that the current sanitizer would still
            change, so some rule was not applied (for example a capture made with
@@ -41,13 +43,17 @@ from redfish_snapshot.postprocess import (  # noqa: E402
     _compact,
     _strip_etags,
     etag_verifies,
+    boot_validity_fields,
+    public_boot_dates,
 )
 from redfish_snapshot.sanitize import (  # noqa: E402
     IdentifierMasker,
     RedfishSanitizer,
     sanitize_path,
     sanitize_redfish,
+    standard_boot_certificate_uri,
 )
+from redfish_snapshot.temporal import CTIME_RE, _mask_power_epochs, paired_display_time  # noqa: E402
 
 PLACEHOLDER_MACS = {RedfishSanitizer.DUMMY_MAC, RedfishSanitizer.DUMMY_WWN}
 
@@ -63,13 +69,23 @@ DETECTORS = [
     ("R-ST", r"\bST: (?!DUMMY)[0-9A-Z]{7}\b", None),
     ("R-SCVCN", r"Certificate (?!DUMMY)[0-9A-Z]{7}\b", None),
     ("R-NQN", r"PowerEdge\.R\d+\.(?!DUMMY)[0-9A-Z]{7}\b", None),
-    ("R-UEFIMAC", r"MAC\((?!001B44AABBCC)[0-9A-Fa-f]{12}", None),
-    ("R-ILOMAC", r"\bilo-(?!001b44aabbcc)[0-9a-f]{12}\b", None),
+    (
+        "R-UEFIMAC",
+        r"MAC\(([0-9A-Fa-f]{12})(?![0-9A-Fa-f])",
+        lambda m: not RedfishSanitizer._is_mac_placeholder(m),
+    ),
+    (
+        "R-ILOMAC",
+        r"\bilo-([0-9a-f]{12})\b",
+        lambda m: not RedfishSanitizer._is_mac_placeholder(m),
+    ),
     (
         "R-BYTERUN",
         r"\b(?:[0-9A-Fa-f]{2}[ :-]){5,}[0-9A-Fa-f]{2}\b",
         lambda m: (
-            m not in PLACEHOLDER_MACS and not set(m.replace(" ", "")) <= set("0:-")
+            m not in PLACEHOLDER_MACS
+            and not RedfishSanitizer._is_mac_placeholder(m)
+            and not set(m.replace(" ", "")) <= set("0:-")
         ),
     ),
     ("R-MACTAIL", r"00:1B:44:AA:BB:CC[:-](?!00:00\b)[0-9A-Fa-f]", None),
@@ -98,7 +114,7 @@ DETECTORS = [
     ),
     (
         "R-CTIME",
-        r"\b[A-Z][a-z]{2} [A-Z][a-z]{2} +\d{1,2} \d{2}:\d{2}:\d{2} (?:UTC |GMT |)\d{4}",
+        CTIME_RE.pattern,
         None,
     ),
     (
@@ -202,6 +218,8 @@ def check_text(rel: str, text: str, masker: IdentifierMasker | None):
     """Checks that work on raw text: S-KNOWN and S-REGEX."""
     if masker is not None and (masker.mask(text) != text or masker.mask(rel) != rel):
         yield "S-KNOWN", "a saved identifier"
+    if any(m.group(1) != "+00:00" for m in OFFSET_RE.finditer(rel)):
+        yield "S-TZ", "<path>"
     for check_id, pattern, predicate in _COMPILED:
         for m in pattern.finditer(text):
             value = m.group(1) if m.lastindex else m.group(0)
@@ -226,6 +244,24 @@ def _serial_token(blob: bytes) -> bool:
 def check_document(data, is_original):
     """Checks that need the parsed document. S-ETAG applies to captures only: a normalized
     document copies its etag from the capture, whose body is public anyway."""
+
+    def temporal_issues(node):
+        if isinstance(node, list):
+            for item in node:
+                yield from temporal_issues(item)
+        elif isinstance(node, dict):
+            if "Timestamp" in node and (expected := paired_display_time(node)):
+                if node["Timestamp"] != expected:
+                    yield "S-TIME", "Timestamp/TimestampWithTZ"
+            if any(key.startswith("ServerPwrMon.") for key in node):
+                expected_power = node.copy()
+                _mask_power_epochs(expected_power)
+                if expected_power != node:
+                    yield "S-TIME", "ServerPwrMon"
+            for child in node.values():
+                yield from temporal_issues(child)
+
+    yield from temporal_issues(data)
     body = _compact(_strip_etags(data))
 
     def etags(obj):
@@ -352,6 +388,8 @@ def scan(fixtures: Path, vendor, model, state: Path | None):
             continue
         label = f"{server.parent.name}/{server.name}"
         masker = _masker_for(state, server)
+        public_dates = {}
+        boot_documents = []
         for path in _server_files(server):
             rel = path.relative_to(server).as_posix()
             try:
@@ -368,10 +406,36 @@ def scan(fixtures: Path, vendor, model, state: Path | None):
                 if data is not None:
                     results += list(check_document(data, rel.startswith("original/")))
                     results += list(check_resanitize(rel, data))
+                    if rel == "metadata.json" and isinstance(data, dict):
+                        for url in data.get("collected_urls", []):
+                            if (
+                                isinstance(url, str)
+                                and re.fullmatch(
+                                    r"/redfish/v1/TelemetryService/MetricReport(?:Definitions|s)/DUMMY-Report-\d+",
+                                    url,
+                                )
+                                and not (
+                                    server / "original" / url.lstrip("/") / "index.json"
+                                ).is_file()
+                            ):
+                                results.append(("S-LINK", "collected_urls"))
+                                break
+                    if (
+                        rel.startswith("original/")
+                        and isinstance(data, dict)
+                        and (uri := standard_boot_certificate_uri(data))
+                    ):
+                        public_dates.setdefault(uri, {}).update(public_boot_dates(data))
+                        if "ValidNotBefore" in data or "ValidNotAfter" in data:
+                            boot_documents.append((uri, rel, data))
             for check_id, sample in results:
                 if (check_id, sample) not in seen:
                     seen.add((check_id, sample))
                     findings.append((check_id, label, rel, sample))
+        for uri, rel, doc in boot_documents:
+            for field, expected in boot_validity_fields(doc, public_dates[uri]):
+                if doc[field] != expected:
+                    findings.append(("S-TIME", label, rel, field))
     return findings
 
 

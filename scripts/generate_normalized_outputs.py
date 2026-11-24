@@ -14,7 +14,7 @@ For large collections (e.g. LogServices/Log1/Entries with many items), only a
 sample of members is requested and written (first 2, last 1, 2 from middle; default max 50).
 
 Usage:
-    uv run python scripts/generate_normalized_outputs.py [--vendor Dell] [--model PowerEdge_R630]
+    uv run python scripts/generate_normalized_outputs.py --fixtures ../fixtures --vendor Dell --model PowerEdge_R740
     uv run python scripts/generate_normalized_outputs.py [--max-collection-sample 50]
 """
 
@@ -27,7 +27,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from redpool.cache import InMemoryCache
-from redpool.mockup import INDEX, iter_mockup_files, relpath_to_uri, uri_to_relpath
+from redpool.mockup import (
+    INDEX,
+    iter_fixture_models,
+    iter_mockup_files,
+    relpath_to_uri,
+    uri_to_relpath,
+)
 from redpool.proxy import RedfishProxy, ServerMetadata
 from tests.redpool import MockRedfishClient
 from normalizers.url_rewrites import reverse_rewrite_path, rewrite_path
@@ -385,6 +391,13 @@ def generate_for_model(
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    repo_root = Path(__file__).resolve().parent.parent
+    parser.add_argument(
+        "--fixtures",
+        type=Path,
+        default=Path(os.environ.get("REDPOOL_FIXTURES") or repo_root / "fixtures"),
+        help="Fixtures root (default: $REDPOOL_FIXTURES or the repository's fixtures/)",
+    )
     parser.add_argument("--vendor", help="Only process this vendor")
     parser.add_argument("--model", help="Only process this model")
     parser.add_argument(
@@ -396,30 +409,22 @@ def main():
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent
-    # REDPOOL_FIXTURES points the script at another corpus checkout.
-    fixtures = Path(os.environ.get("REDPOOL_FIXTURES") or repo_root / "fixtures")
+    if not args.fixtures.is_dir():
+        parser.error(f"fixtures directory not found: {args.fixtures}")
+    models = list(
+        iter_fixture_models(args.fixtures, vendor=args.vendor, model=args.model)
+    )
+    if not models:
+        parser.error(f"no fixture models matched under {args.fixtures}")
+
     proxy = RedfishProxy()
     proxy.objecttype_cache = InMemoryCache(ttl_seconds=60)
     proxy.logger.setLevel(logging.WARNING)
 
-    for vendor_name in sorted(os.listdir(str(fixtures))):
-        vendor_dir = os.path.join(str(fixtures), vendor_name)
-        if not os.path.isdir(vendor_dir):
-            continue
-        if args.vendor and vendor_name.lower() != args.vendor.lower():
-            continue
-
-        for model_name in sorted(os.listdir(vendor_dir)):
-            model_dir = os.path.join(vendor_dir, model_name)
-            if not os.path.isdir(model_dir):
-                continue
-            if args.model and model_name.lower() != args.model.lower():
-                continue
-
-            generate_for_model(
-                proxy, vendor_name, model_dir, args.max_collection_sample
-            )
+    for model_dir in models:
+        generate_for_model(
+            proxy, model_dir.parent.name, str(model_dir), args.max_collection_sample
+        )
 
 
 if __name__ == "__main__":

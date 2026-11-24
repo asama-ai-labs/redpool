@@ -179,7 +179,7 @@ def test_architecture_id_placeholder_matches_the_schema_pattern():
 
 # --- time, zones and counters -------------------------------------------------------------
 
-from redfish_snapshot.temporal import TemporalMasker  # noqa: E402
+from redfish_snapshot.temporal import TIME_POLICY_VERSION, TemporalMasker  # noqa: E402
 
 
 def _masker(capture="Vendor/Model"):
@@ -243,6 +243,19 @@ def test_manufacture_date_rounds_to_month_and_licence_dates_to_year():
     )
     assert out["ProductionDate"].endswith("-01T00:00:00Z")
     assert out["LicenseSoldDate"].endswith("-01-01T00:00:00+00:00")
+
+
+def test_ctime_timestamps_shift_and_manufacture_dates_round():
+    m = _masker()
+    out = m.mask(
+        {
+            "BootTime": "Tue Apr  1 12:00:00 2025 GMT",
+            "SysTime": "Tue Apr  1 12:00:00 UTC 2025",
+            "ManufactureDate": "Tue Apr  1 12:00:00 2025",
+        }
+    )
+    assert out["BootTime"] == out["SysTime"] == m.shift_text("2025-04-01T12:00:00Z")
+    assert out["ManufactureDate"] == out["BootTime"][:7] + "-01T00:00:00"
 
 
 def test_dates_damaged_by_the_old_ipv6_bug_keep_only_the_year():
@@ -346,7 +359,68 @@ def test_time_policy_marker_makes_a_rerun_change_nothing(tmp_path):
     sanitize_mockups([root], [meta], **run)
 
     assert ((root / "a.json").read_text(), meta.read_text()) == first
-    assert json.loads(meta.read_text())["time_policy"] == 1
+    assert json.loads(meta.read_text())["time_policy"] == TIME_POLICY_VERSION
+
+
+def test_timestamped_resource_paths_match_body_and_metadata(tmp_path):
+    root = tmp_path / "Vendor" / "Model" / "original"
+    path = "/redfish/v1/Reports/Report-2025-04-01T12:00:00+05:30"
+    doc = root / path.lstrip("/") / "index.json"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(json.dumps({"@odata.id": path}))
+    meta = root.parent / "metadata.json"
+    meta.write_text(json.dumps({"collected_urls": [path]}))
+
+    sanitize_mockups([root], log=lambda _m: None, mask_time=True, time_secret=b"k")
+
+    [public_path] = json.loads(meta.read_text())["collected_urls"]
+    assert public_path != path
+    assert public_path.endswith("+00:00")
+    assert not doc.exists()
+    copied = root / public_path.lstrip("/") / "index.json"
+    assert json.loads(copied.read_text())["@odata.id"] == public_path
+
+
+def test_time_policy_upgrade_reuses_shifted_resource_ids(tmp_path):
+    root = tmp_path / "Vendor" / "Model" / "original"
+    raw_path = "/redfish/v1/Reports/Report-2025-04-01T12:00:00+05:30"
+    public_path = "/redfish/v1/Reports/Report-2024-06-03T08:10:00+00:00"
+    doc = root / raw_path.lstrip("/") / "index.json"
+    doc.parent.mkdir(parents=True)
+    report = {
+        "@odata.id": public_path,
+        "ExistingTime": "2024-06-03T08:10:00Z",
+        "BootTime": "Tue Apr  1 12:00:00 2025",
+        "PowerOnHours": 1000,
+    }
+    doc.write_text(json.dumps(report))
+    meta = root.parent / "metadata.json"
+    meta.write_text(
+        json.dumps(
+            {
+                "time_policy": 1,
+                "collection_timestamp": "2024-06-03",
+                "collected_urls": [raw_path],
+            }
+        )
+    )
+
+    run = dict(log=lambda _m: None, mask_time=True, time_secret=b"another-key")
+    sanitize_mockups([root], **run)
+
+    repaired = root / public_path.lstrip("/") / "index.json"
+    assert not doc.exists()
+    out = json.loads(repaired.read_text())
+    assert out["BootTime"] != report["BootTime"]
+    assert {k: v for k, v in out.items() if k != "BootTime"} == {
+        k: v for k, v in report.items() if k != "BootTime"
+    }
+    assert json.loads(meta.read_text()) == {
+        "time_policy": TIME_POLICY_VERSION,
+        "collection_timestamp": "2024-06-03",
+        "collected_urls": [public_path],
+    }
+    assert sanitize_mockups([root], **run) == (0, 0, 0)
 
 
 def test_mask_time_without_a_secret_is_refused(tmp_path):
@@ -579,3 +653,117 @@ def test_sanitizer_placeholders_are_never_collected_as_identifiers():
         "SerialNumber": "DUMMY-SerialNumber-3",
     }
     assert collect_identifiers(doc) == set()
+
+
+def test_private_certificate_dates_are_independent_of_time_secret():
+    doc = {
+        "@odata.type": "#Certificate.v1_6_0.Certificate",
+        "ValidNotBefore": "2025-04-01T12:00:00Z",
+        "ValidNotAfter": "2028-04-01T12:00:00Z",
+        "Issuer": {"Country": "GB"},
+    }
+    attrs = {
+        "SecurityCertificate.3.CertValidFrom": "Apr  1 12:00:00 2025 GMT",
+        "SecurityCertificate.3.SubjectCountryCode": "GB",
+    }
+    for secret in (b"one", b"two"):
+        m = TemporalMasker(secret, "Vendor/Model")
+        cert = m.mask(_clean(doc))
+        attr = m.mask(_clean(attrs))
+        assert (
+            cert["ValidNotBefore"]
+            == attr["SecurityCertificate.3.CertValidFrom"]
+            == "2000-01-01T00:00:00Z"
+        )
+        assert cert["ValidNotAfter"] == "2030-01-01T00:00:00Z"
+        assert "Country" not in cert["Issuer"]
+        assert "SecurityCertificate.3.SubjectCountryCode" not in attr
+
+
+def test_power_epochs_and_lenovo_clock_migrate_without_shifting_companion():
+    m = _masker()
+    row = {
+        "Timestamp": "01 Apr 2025, 12:00:00.000 AM",
+        "TimestampWithTZ": "2024-05-02T12:03:04+00:00",
+    }
+    assert m.mask(row, legacy=True) == {
+        **row,
+        "Timestamp": "02 May 2024, 12:03:04.000 PM",
+    }
+    obj = {
+        "ServerPwrMon.1.PeakPowerTime": 1700000200,
+        "ServerPwrMon.1.MinPowerTime": "1700000100",
+        "CapacityBytes": 1700000200,
+    }
+    assert m.mask(obj, legacy=True) == {
+        "ServerPwrMon.1.PeakPowerTime": 946684801,
+        "ServerPwrMon.1.MinPowerTime": "946684800",
+        "CapacityBytes": 1700000200,
+    }
+
+
+def test_custom_report_ids_are_consistent_in_files_metadata_and_links(tmp_path):
+    root = tmp_path / "Vendor" / "Model" / "original"
+    urls = []
+    for collection in ("MetricReports", "MetricReportDefinitions"):
+        for token in ("SiteReport", "SiteReportFull", "CPUSensor"):
+            uri = f"/redfish/v1/TelemetryService/{collection}/{token}"
+            path = root / uri.lstrip("/") / "index.json"
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"@odata.id": uri, "Id": token, "Name": token}))
+            urls.append(uri)
+    meta = root.parent / "metadata.json"
+    meta.write_text(json.dumps({"collected_urls": urls}))
+    sanitize_mockups([root], [meta], log=lambda _: None)
+    out = json.loads(meta.read_text())["collected_urls"]
+    assert len(set(out)) == 6 and "SiteReport" not in str(out)
+    assert [u.rsplit("/", 1)[-1] for u in out[:3]] == [
+        u.rsplit("/", 1)[-1] for u in out[3:]
+    ]
+    for url in out:
+        doc = json.loads((root / url.lstrip("/") / "index.json").read_text())
+        assert (
+            doc["@odata.id"] == url
+            and doc["Name"] == doc["Id"] == url.rsplit("/", 1)[-1]
+        )
+    assert sanitize_mockups([root], [meta], log=lambda _: None) == (0, 0, 0)
+
+
+def test_public_boot_certificate_uses_oem_validity_after_upgrade(tmp_path):
+    root = tmp_path / "Vendor" / "Model" / "original"
+    base = "/redfish/v1/Systems/1/SecureBoot/"
+    ident = "StdSecbootpolicy.1"
+    dates = {
+        "ValidFrom": "Apr  1 01:02:03 2020 GMT",
+        "ValidTo": "Apr  1 01:02:03 2030 GMT",
+    }
+    for segment, fields in (
+        ("Oem/Dell/Certificates/DB", {**dates, "SecureBootPolicy": "Standard"}),
+        (
+            "SecureBootDatabases/db/Certificates",
+            {
+                "ValidNotBefore": "2019-08-03T09:00:00Z",
+                "ValidNotAfter": "2029-08-03T09:00:00Z",
+            },
+        ),
+    ):
+        url = base + segment + "/" + ident
+        file = root / url.lstrip("/") / "index.json"
+        file.parent.mkdir(parents=True)
+        file.write_text(
+            json.dumps(
+                {
+                    "@odata.type": "#Certificate.v1_6_0.Certificate",
+                    "@odata.id": url,
+                    "Id": ident,
+                    **fields,
+                }
+            )
+        )
+    (root.parent / "metadata.json").write_text(json.dumps({"time_policy": 2}))
+    kwargs = dict(mask_time=True, time_secret=b"test", log=lambda _: None)
+    sanitize_mockups([root], **kwargs)
+    data = json.loads(file.read_text())
+    assert data["ValidNotBefore"] == "2020-04-01T01:02:03Z"
+    assert data["ValidNotAfter"] == "2030-04-01T01:02:03Z"
+    assert sanitize_mockups([root], **kwargs) == (0, 0, 0)
