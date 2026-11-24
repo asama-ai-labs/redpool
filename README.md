@@ -118,7 +118,7 @@ Normalizers are validated against the following models. The last column says whe
 | Vendor     | Model                         | BMC / Firmware (tested)                          | Public fixtures |
 | ---------- | ----------------------------- | ------------------------------------------------ | ---------------- |
 | Dell       | PowerEdge R630                | iDRAC 2.85.85.85 (Redfish 1.4.0)                 | no |
-| Dell       | PowerEdge R630 (second host)  | iDRAC 2.86.86.86 (Redfish 1.4.0); fixture `PowerEdge_R630_2`, same model as R630 | no |
+| Dell       | PowerEdge R630 (second host)  | iDRAC 2.86.86.86 (Redfish 1.4.0); same model as R630 | no |
 | Dell       | PowerEdge R6525               | iDRAC 7.20.80.50 (Redfish 1.20.1)                | no |
 | Dell       | PowerEdge R740                | iDRAC 7.00.00.183 (Redfish 1.17.0)               | yes |
 | Dell       | PowerEdge R7525               | iDRAC 7.10.30.00 (Redfish 1.18.0)                | yes |
@@ -126,7 +126,7 @@ Normalizers are validated against the following models. The last column says whe
 | Dell       | PowerEdge R7625               | iDRAC 7.30.30.51 (Redfish 1.20.1)                | no |
 | HPE        | ProLiant DL360 Gen10          | iLO 5 v2.96 (Redfish 1.6.0)                      | no |
 | HPE        | ProLiant DL380 Gen10          | iLO 5 v2.96 (Redfish 1.6.0)                      | yes |
-| HPE        | ProLiant DL380 Gen10 (second) | iLO 5 v2.42 (Redfish 1.6.0); fixture `ProLiant_DL380_Gen10_2` | no |
+| HPE        | ProLiant DL380 Gen10 (second) | iLO 5 v2.42 (Redfish 1.6.0)                      | no |
 | HPE        | ProLiant DL380a Gen11         | iLO 6 v1.59 (Redfish 1.13.0)                     | no |
 | HPE        | ProLiant DL385 Gen10 Plus     | iLO 5 v3.07 (Redfish 1.20.0)                     | yes |
 | Intel      | M50CYP2SBSTD                  | Intel BMC 2.93.a858f4d1 (Redfish 1.7.0)          | no |
@@ -134,8 +134,8 @@ Normalizers are validated against the following models. The last column says whe
 | Lenovo     | ThinkSystem SR650 V2          | XCC AFBT48B 4.70 (2024-02-20) (Redfish 1.15.0)   | no |
 | Lenovo     | ThinkSystem SR675 V3          | XCC2 QGX394J 14.10 (2025-09-05) (Redfish 1.22.0) | no |
 | Lenovo     | ThinkSystem SR680a V3         | XCC R3X308M 3.10 (2024-11-21) (Redfish 1.16.0)   | no |
-| Lenovo     | ThinkSystem SR680a V3         | XCC R3X318M 6.10 (2025-06-10) (Redfish 1.20.0); fixture `ThinkSystem_SR680a_V3_610` | no |
-| Lenovo     | ThinkSystem SR680a V3         | XCC R3X328A 9.10 (2025-09-08) (Redfish 1.22.0); fixture `ThinkSystem_SR680a_V3_910` | no |
+| Lenovo     | ThinkSystem SR680a V3         | XCC R3X318M 6.10 (2025-06-10) (Redfish 1.20.0)   | no |
+| Lenovo     | ThinkSystem SR680a V3         | XCC R3X328A 9.10 (2025-09-08) (Redfish 1.22.0)   | no |
 | Supermicro | ARS-110M-NR (Ampere Altra)    | OpenBmc BMC 51.02.25.00 (Redfish 1.17.0)         | yes |
 | Supermicro | SYS-220TP-HTTR                | ASPEED BMC 01.02.34 (Redfish 1.9.0)              | yes |
 
@@ -242,7 +242,7 @@ The normalized files under `fixtures/<Vendor>/<Model>/normalized/` are generated
 uv run python scripts/generate_normalized_outputs.py
 
 # Limit to one vendor or model
-uv run python scripts/generate_normalized_outputs.py --vendor Dell --model PowerEdge_R740
+uv run python scripts/generate_normalized_outputs.py --vendor <Vendor> --model <Model>
 
 git -C fixtures diff --stat
 ```
@@ -253,13 +253,13 @@ To verify the mock server is serving fixtures correctly (no fishymetrics, no pro
 
 ```bash
 # Start mock and request 10 random resources from fixtures (default)
-uv run python scripts/mock_server_test.py --model Dell/PowerEdge_R740
+uv run python scripts/mock_server_test.py --model <Vendor>/<Model>
 
 # Request 8 resources
-uv run python scripts/mock_server_test.py --model Dell/PowerEdge_R740 --count 8
+uv run python scripts/mock_server_test.py --model <Vendor>/<Model> --count 8
 
 # Mock already running on port 9000
-uv run python scripts/mock_server_test.py --model Dell/PowerEdge_R740 --no-start --mock-port 9000
+uv run python scripts/mock_server_test.py --model <Vendor>/<Model> --no-start --mock-port 9000
 ```
 
 ### Fishymetrics + mock test (no proxy)
@@ -272,13 +272,13 @@ git submodule update --init third_party/fishymetrics
 make -C third_party/fishymetrics build
 
 # Test one model (scrape can take a few minutes for large fixtures)
-uv run python scripts/fishymetrics_mock_test.py --model Dell/PowerEdge_R740
+uv run python scripts/fishymetrics_mock_test.py --model <Vendor>/<Model>
 
 # Test all models
 uv run python scripts/fishymetrics_mock_test.py
 
 # Longer scrape timeout if needed (default 300s)
-uv run python scripts/fishymetrics_mock_test.py --model Dell/PowerEdge_R740 --scrape-timeout 600
+uv run python scripts/fishymetrics_mock_test.py --model <Vendor>/<Model> --scrape-timeout 600
 ```
 
 Uses default ports 18889 (mock) and 10024 (fishymetrics).
