@@ -1,0 +1,27 @@
+# One mitmdump+redpool worker. %%i is the worker index (0 .. REDPOOL_SHARD_NUM_WORKERS-1).
+# Machine-specific User, WorkingDirectory, Environment=, and EnvironmentFile= are set under
+# /etc/systemd/system/redpool-shard-worker@.service.d/ by ./install.sh (not in the repo).
+#
+[Unit]
+Description=Redpool shard mitmdump worker %i
+Documentation=https://github.com/asama-ai-labs/redpool
+PartOf=redpool-shard.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+LimitNOFILE=1048576
+
+ExecStart=/usr/bin/env uv run redpool-shard-worker \
+    --index %i \
+    --worker-host ${REDPOOL_SHARD_WORKER_HOST} \
+    --worker-port-base ${REDPOOL_SHARD_WORKER_PORT_BASE} \
+    --metrics-port-base ${REDPOOL_SHARD_METRICS_PORT_BASE}
+
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

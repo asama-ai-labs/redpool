@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+# Weekly update pull requests for the pinned GitHub Actions, the Dockerfile base-image
+# digests, and the uv lock file.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly

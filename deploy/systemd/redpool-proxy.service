@@ -1,0 +1,40 @@
+# Single-process Redpool (one mitmdump + mitm_proxy addon).
+#
+# Install (adjust paths and user):
+#   sudo install -m 644 deploy/systemd/redpool-proxy.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now redpool-proxy
+#
+# Requires: `uv` on PATH (e.g. %h/.local/bin) and synced deps:
+#   cd /opt/redpool && uv sync
+#
+[Unit]
+Description=Redpool Redfish normalizing proxy (single mitmdump)
+Documentation=https://github.com/asama-ai-labs/redpool
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=redpool
+Group=redpool
+WorkingDirectory=/opt/redpool
+
+Environment=PYTHONUNBUFFERED=1
+# uv (Astral installer uses %h/.local/bin); .venv/bin for mitmdump subprocess.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/opt/redpool/.venv/bin:/usr/bin:/bin
+EnvironmentFile=-/etc/redpool/proxy.env
+
+LimitNOFILE=1048576
+
+# Loopback by default. To serve collectors on other hosts use --listen-host 0.0.0.0 and
+# restrict access (firewall, REDPOOL_ALLOWED_TARGETS, proxyauth). See SECURITY.md.
+ExecStart=/usr/bin/env uv run redpool-proxy --listen-host 127.0.0.1 -p 7000
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

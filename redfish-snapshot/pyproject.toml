@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+[project]
+name = "redfish-snapshot"
+version = "0.1.1"
+description = "Redfish Snapshot — capture and sanitize Redfish API responses from BMCs"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    {name = "Asama Inc.", email = "181337149+jj-asama@users.noreply.github.com"}
+]
+license = "Apache-2.0"
+keywords = ["redfish", "api", "snapshot", "data-collection", "server-management"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "redfish>=3.3.1",
+    "urllib3>=1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+redfish-snapshot = "redfish_snapshot.main:main"
+
+[project.urls]
+Homepage = "https://github.com/asama-ai-labs/redpool"
+Repository = "https://github.com/asama-ai-labs/redpool"
+Documentation = "https://github.com/asama-ai-labs/redpool/blob/main/redfish-snapshot/README.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/redfish_snapshot"]

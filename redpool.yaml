@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+# ===========================================================================
+# Redpool Configuration
+# ===========================================================================
+# Copy this file and customize as needed. Pass the path via:
+#   REDPOOL_CONFIG=/path/to/redpool.yaml uv run redpool-proxy ...
+#
+# Every key has a sensible default — you only need to override what you
+# want to change.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Cache TTLs (seconds)
+# ---------------------------------------------------------------------------
+cache:
+  # How long to cache raw Redfish GET responses from BMCs.
+  # Lower = fresher telemetry, higher = less BMC load.
+  # Cached per credential: callers with different credentials never share entries.
+  response_ttl: 120
+
+  # How long to cache server metadata (vendor, model, hostname).
+  # These are hardware attributes that never change.
+  metadata_ttl: 86400    # 24 hours
+
+  # How long to cache the resource type (collection vs resource) classification.
+  # Used during normalizer path resolution. Doesn't change for a given BMC.
+  objecttype_ttl: 86400  # 24 hours
+
+# ---------------------------------------------------------------------------
+# Proxy behavior
+# ---------------------------------------------------------------------------
+proxy:
+  # Address the Prometheus /metrics endpoint binds. Loopback by default: the endpoint is
+  # not authenticated and lists the BMCs the proxy has reached. Use 0.0.0.0 to let a remote
+  # Prometheus scrape it, and restrict who can reach the port. REDPOOL_METRICS_HOST overrides.
+  metrics_host: 127.0.0.1
+
+  # Port for the Prometheus /metrics endpoint.
+  metrics_port: 9201
+
+  # Which BMCs a caller may ask Redpool to reach. Empty (the default) allows any host.
+  # Entries are hostnames, '*' globs (*.bmc.example.net) or CIDRs (10.20.0.0/16).
+  # A CIDR matches only a request that names an IP; names are never resolved.
+  # Globs match host names only, so an IP-shaped glob such as 10.1.* is refused: use a CIDR.
+  # Redpool refuses to start on a config file it cannot parse or that holds a key it does
+  # not know, because falling back to defaults would empty this list (allow every host).
+  # REDPOOL_ALLOWED_TARGETS (comma-separated) overrides this list.
+  allowed_targets: []
+
+  # Serve only /redfish paths (after decoding and normalizing). Others get 403.
+  require_redfish_path: true
+
+  # Verify each BMC's TLS certificate. Off by default because BMCs usually have
+  # self-signed certificates, so Redpool cannot tell a real BMC from an impostor.
+  # Basic-auth credentials are sent over that connection. Turn this on when BMCs
+  # have certificates that chain to a CA you trust. A startup warning is logged
+  # while it is off.
+  tls_verify: false
+
+  # PEM file of CA certificates for tls_verify. Empty uses the system bundle.
+  # Ignored while tls_verify is false.
+  ca_file: ""
+
+  # Most BMCs tracked at once. Past this, the least recently used are dropped.
+  max_targets: 2048
+
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  # Used by the mitm addon (stdlib logging), ``redpool-proxy``, golden scripts
+  # (merged temp config), and ``mitm_proxy.configure``.  INFO shows mitmproxy /
+  # redpool INFO lines; WARNING+ lowers ``termlog_verbosity`` / ``flow_detail``.
+  # DEBUG logs each request's URL and status, not its headers, so credentials stay out of the log.
+  log_level: WARNING
+
+  # Exact paths fetched via the redpool client without normalization (passthrough).
+  # Kept out of vendor normalizers so service root stays BMC-native; still uses the
+  # same BMC HTTP session as normalized paths (avoids a second mitmproxy upstream).
+  skip_paths:
+    - /redfish/v1/
+    - /redfish/v1
+
+  # Session paths: also handled by the addon as raw passthrough (any method) on the
+  # same per-BMC session — not true mitm upstream — so scrapes keep one TCP to the BMC.
+  skip_prefixes:
+    - /redfish/v1/Sessions
+    - /redfish/v1/SessionService
+
+  # Path patterns that should never be cached by the Redfish HTTP client.
+  # Supports '*' as a wildcard for a single path component.
+  non_cacheable_patterns:
+    - /redfish/v1/SessionService
+    - /redfish/v1/Systems/*/Actions
+    - /redfish/v1/Managers/*/Actions
+    - /redfish/v1/Chassis/*/Actions
+    - /redfish/v1/TaskService
+    - /redfish/v1/UpdateService
+
+# ---------------------------------------------------------------------------
+# Normalization feature flags
+# ---------------------------------------------------------------------------
+# Toggle individual field-derivation behaviors. Set to false to return
+# only the raw BMC values without any enrichment or fallback logic.
+#
+normalization:
+  # Derive PartNumber from Model string for Intel Xeon / AMD EPYC
+  # when the BMC leaves PartNumber empty.
+  derive_part_number: true
+
+  # Derive BaseSpeedMHz via fallback chain:
+  #   BaseSpeedMHz → OperatingSpeedMHz → parse "@ X.X GHz" from Model
+  derive_base_speed: true
+
+  # Build processor → memory Links by matching DIMMs to sockets.
+  # Requires additional API calls during prefetch.
+  build_processor_links: true
+
+  # Aggregate MemorySummary (TotalMemorySizeMiB, ECCModeEnabled)
+  # for processors that lack it.
+  build_memory_summary: true
+
+  # Synthesize ProcessorSummary.Status from CPU processor members when the BMC
+  # omits summary status (extra GETs during ComputerSystem prefetch).
+  build_processor_summary_status: true
+
+  # Enrich Ampere processor Model to "Ampere(R) Altra(R) {PartNumber}"
+  # when the BMC only reports "Ampere(R) Altra(R) Processor".
+  enrich_ampere_model: true
+
+  # Strip trailing whitespace from Memory PartNumber
+  # (HPE BMCs pad with spaces).
+  strip_memory_part_number: true
+
+  # Use vendor OEM fields (e.g. Oem.Hpe.RatedSpeedMHz) as overrides
+  # for standard fields in version_overrides.
+  use_vendor_oem_overrides: true
+
+  # Apply response tweaks for gofish client compatibility (e.g. PCIeFunction
+  # DeviceID alias). Set to false to return strictly Redfish-shaped responses.
+  ensure_gofish_compat: true

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability, or a fixture that still holds an identifier that should have been removed
+    url: https://github.com/asama-ai-labs/redpool/security/advisories/new
+    about: Open a private security advisory. Do not file a public issue.

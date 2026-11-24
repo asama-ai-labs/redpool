@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+# Redpool proxy — image ghcr.io/asama-ai-labs/redpool[:tag]
+#
+#   docker compose pull
+#   docker compose up -d
+#
+# Pin a release tag:
+#   REDPOOL_IMAGE_TAG=0.1.0 docker compose pull && docker compose up -d
+#
+# Scrape a BMC through the proxy:
+#   https_proxy=http://127.0.0.1:8080 curl -sku user:pass https://<bmc-ip>/redfish/v1/ | jq .
+
+services:
+  proxy:
+    image: ghcr.io/asama-ai-labs/redpool:${REDPOOL_IMAGE_TAG:-latest}
+    ports:
+      # Redpool does not authenticate callers. These publish on loopback only. To serve other
+      # hosts, change 127.0.0.1 and set REDPOOL_ALLOWED_TARGETS or proxyauth (see SECURITY.md).
+      - "127.0.0.1:${REDPOOL_PROXY_PORT:-8080}:8080"
+      - "127.0.0.1:${REDPOOL_METRICS_PORT:-9101}:9101"
+    environment:
+      REDPOOL_METRICS_PORT: "9101"
+    restart: unless-stopped

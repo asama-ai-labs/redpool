@@ -1,0 +1,18 @@
+# Sharded Redpool: start/stop everything with this target.
+#
+#   sudo systemctl enable --now redpool-shard.target
+#   sudo systemctl stop redpool-shard.target
+#
+# Worker count and ports: deploy/systemd/redpool-shard.env (edit, then daemon-reload + restart).
+# After changing REDPOOL_SHARD_NUM_WORKERS: systemctl daemon-reload && systemctl restart redpool-shard.target
+#
+# Requires: symlink deploy/systemd/system-generators/redpool-shard-generator → /etc/systemd/system-generators/ (install.sh does this)
+#
+[Unit]
+Description=Redpool sharded proxy (front + mitmdump workers)
+Documentation=https://github.com/asama-ai-labs/redpool
+After=network-online.target
+Wants=network-online.target
+
+[Install]
+WantedBy=multi-user.target

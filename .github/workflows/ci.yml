@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+# Continuous integration for the open-source repository. Image publishing is in
+# docker-publish.yml, and the sign-off check is in dco.yml.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and type check
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages --all-extras --python 3.12
+
+      - name: Lint with ruff
+        run: uv run ruff check .
+
+      - name: Check formatting with ruff
+        run: uv run ruff format --check .
+
+      - name: Type check redpool with mypy
+        run: uv run mypy redpool
+
+      - name: Build sdist and check its contents
+        # Fails if the sdist holds any third_party/ path or any fixtures/ path
+        # other than the README.
+        run: |
+          uv build --sdist --out-dir "$RUNNER_TEMP/sdist"
+          tar -tzf "$RUNNER_TEMP"/sdist/redpool-*.tar.gz > "$RUNNER_TEMP/sdist.txt"
+          if grep -E '/(third_party/|fixtures/)' "$RUNNER_TEMP/sdist.txt" | grep -vE '/fixtures/README\.md$'; then
+            echo "::error::sdist bundles third_party/ or fixtures/ files"
+            exit 1
+          fi
+
+      - name: Check documentation links
+        # Fails on a relative link, a heading anchor or a backticked repository path that does not exist.
+        run: uv run python scripts/check_doc_links.py
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages --all-extras --python ${{ matrix.python-version }}
+
+      - name: Run tests
+        # Runs every test directory, including redfish-snapshot. Tests that need the
+        # fixtures or the Redfish schema bundle skip with a message when those
+        # submodules are missing.
+        run: uv run pytest -q
+
+      - name: Validate normalized fixtures against the pinned DMTF schemas
+        # Once is enough, and the tree is the same on every Python version. Fails on an
+        # invalid document, or a DMTF type at a version newer than the pinned bundle.
+        if: matrix.python-version == '3.12'
+        run: uv run python scripts/validate_redfish_schema.py --strict

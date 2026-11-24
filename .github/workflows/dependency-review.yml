@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+# Review dependency changes on pull requests. GitHub's dependency graph must be
+# enabled for the repository.
+
+name: Dependency review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  review:
+    name: Dependency review
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Review dependencies
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1

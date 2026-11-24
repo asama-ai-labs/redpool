@@ -1,0 +1,31 @@
+# TCP shard front only — mitmdumps are redpool-shard-worker@.service (see redpool-shard.target).
+# Machine-specific User, WorkingDirectory, Environment=, and EnvironmentFile= are set under
+# /etc/systemd/system/redpool-shard-front.service.d/ by ./install.sh (not in the repo).
+#
+[Unit]
+Description=Redpool shard front (hash router to workers)
+Documentation=https://github.com/asama-ai-labs/redpool
+PartOf=redpool-shard.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+LimitNOFILE=1048576
+
+ExecStart=/usr/bin/env uv run redpool-shard-proxy \
+    --front-only \
+    -n ${REDPOOL_SHARD_NUM_WORKERS} \
+    --front-host ${REDPOOL_SHARD_FRONT_HOST} \
+    --front-port ${REDPOOL_SHARD_FRONT_PORT} \
+    --worker-host ${REDPOOL_SHARD_WORKER_HOST} \
+    --worker-port-base ${REDPOOL_SHARD_WORKER_PORT_BASE} \
+    --metrics-port-base ${REDPOOL_SHARD_METRICS_PORT_BASE} \
+    --parent-admin-port ${REDPOOL_SHARD_PARENT_ADMIN_PORT}
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,201 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+# Build the image on every pull request. Push it to GHCR when a v* tag is created:
+#   ghcr.io/<owner>/redpool:<version>
+# A tag with a pre-release suffix (v1.2.0-rc1) is not tagged "latest".
+
+name: Docker publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - redpool/**
+      - normalizers/**
+      - redfish-snapshot/**
+      - .github/workflows/docker-publish.yml
+
+permissions:
+  contents: read
+
+env:
+  GHCR_REGISTRY: ghcr.io
+
+jobs:
+  test:
+    name: Lint and test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-packages --all-extras --python 3.12
+
+      - name: Lint with ruff
+        run: uv run ruff check .
+
+      - name: Check formatting with ruff
+        run: uv run ruff format --check .
+
+      - name: Type check redpool with mypy
+        run: uv run mypy redpool
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Validate normalized fixtures against the pinned DMTF schemas
+        run: uv run python scripts/validate_redfish_schema.py --strict
+
+  build:
+    name: Build (${{ matrix.image_name }})
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: redpool
+            image_name: redpool
+          - target: redfish-snapshot
+            image_name: redfish-snapshot
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Checkout PCI IDs
+        run: git submodule update --init third_party/pciids
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Build without pushing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: Dockerfile
+          target: ${{ matrix.target }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image_name }}
+
+  publish:
+    name: Publish (${{ matrix.image_name }})
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless cosign signing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: redpool
+            image_name: redpool
+          - target: redfish-snapshot
+            image_name: redfish-snapshot
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Checkout PCI IDs
+        run: git submodule update --init third_party/pciids
+
+      - name: Derive version and image tags
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          IMAGE="${GHCR_REGISTRY}/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image_name }}"
+
+          if [[ "$TAG" == *-* ]]; then
+            RELEASE_TYPE="pre-release"
+          else
+            RELEASE_TYPE="release"
+          fi
+
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:${TAG}"
+            if [ "$RELEASE_TYPE" = "release" ]; then
+              echo "${IMAGE}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "RELEASE_TYPE=${RELEASE_TYPE}" >> "$GITHUB_ENV"
+          echo "Image:        ${IMAGE}:${TAG}"
+          echo "Release type: ${RELEASE_TYPE}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.image_name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}
+
+      - name: Sign the image
+        # Keyless: the signature is tied to this workflow's identity. Signing the digest
+        # covers every tag that points at it.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Publish release summary
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### Release: ${{ matrix.image_name }}"
+            echo "| Attribute | Value |"
+            echo "| --- | --- |"
+            echo "| **Tag** | \`${TAG}\` |"
+            echo "| **Release type** | \`${RELEASE_TYPE}\` |"
+            echo "| **Image** | \`${IMAGE}@${DIGEST}\` |"
+            echo "| **Git commit** | \`${GITHUB_SHA}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

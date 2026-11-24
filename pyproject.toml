@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Asama Inc.
+
+[project]
+name = "redpool"
+version = "0.1.0"
+description = "Redfish normalizing MITM proxy"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+authors = [{name = "Asama Inc."}]
+keywords = ["redfish", "bmc", "proxy", "mitmproxy", "normalization", "server-management"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: System :: Monitoring",
+]
+dependencies = [
+    "mitmproxy",
+    "prometheus-client",
+    "pydantic",
+    "pyyaml",
+    "redfish>=3.3.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/asama-ai-labs/redpool"
+Repository = "https://github.com/asama-ai-labs/redpool"
+Issues = "https://github.com/asama-ai-labs/redpool/issues"
+Changelog = "https://github.com/asama-ai-labs/redpool/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "jsonschema[format-nongpl]>=4.18",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+redpool-proxy = "redpool.__main__:main"
+redpool-shard-proxy = "redpool.shard_supervisor:main"
+redpool-shard-worker = "redpool.shard_worker:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["redpool", "normalizers"]
+
+[tool.hatch.build.targets.sdist]
+# Allowlist: the source distribution carries first-party code only, never the
+# vendored third_party trees or the fixture corpus.
+include = [
+    "/redpool",
+    "/normalizers",
+    "/redpool.yaml",
+    "/README.md",
+    "/LICENSE",
+    "/NOTICE",
+]
+
+[tool.uv.workspace]
+members = ["redfish-snapshot"]
+
+[tool.ruff]
+# Vendored and fixture trees are not first-party code.
+extend-exclude = ["third_party", "fixtures", ".venv"]
+
+[tool.mypy]
+# Lenient by design: flag clear errors in first-party code without requiring
+# annotations throughout. Tighten module by module over time.
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = false
+exclude = ["third_party/", "fixtures/", ".venv/"]

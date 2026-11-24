@@ -1,0 +1,21 @@
+[submodule "third_party/fishymetrics"]
+	path = third_party/fishymetrics
+	url = https://github.com/Comcast/fishymetrics
+[submodule "third_party/redfish-inventory-exporter"]
+	path = third_party/redfish-inventory-exporter
+	url = https://github.com/asama-ai-labs/redfish-inventory-exporter
+[submodule "third_party/pciids"]
+	path = third_party/pciids
+	url = https://github.com/pciutils/pciids.git
+[submodule "third_party/Redfish-Publications"]
+	path = third_party/Redfish-Publications
+	url = https://github.com/DMTF/Redfish-Publications
+[submodule "third_party/Redfish-Mockup-Server"]
+	path = third_party/Redfish-Mockup-Server
+	url = https://github.com/DMTF/Redfish-Mockup-Server
+[submodule "third_party/Swordfish-Publications"]
+	path = third_party/Swordfish-Publications
+	url = https://github.com/SNIA/Swordfish-Publications
+[submodule "fixtures"]
+	path = fixtures
+	url = https://github.com/asama-ai-labs/redpool-fixtures.git

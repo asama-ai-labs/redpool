@@ -1,0 +1,682 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/asama-ai-labs/redpool/schemas/json-schema/Redpool.v1_0_0.json",
+  "title": "Redpool OEM extension, version 1.0.0",
+  "description": "The Oem.Redpool block that Redpool adds to normalized Redfish resources.",
+  "definitions": {
+    "HpeSmartStorage": {
+      "type": "object",
+      "description": "Named values Redpool reads from a vendor's SmartStorage payload.",
+      "properties": {
+        "ChargeLevelPercent": {
+          "type": "number",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Kind": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MaximumCapWatts": {
+          "type": "number",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "RemainingChargeTimeSeconds": {
+          "type": "number",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "TemperatureCelsius": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "UncorrectedReadErrors": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "UncorrectedWriteErrors": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolBios": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Bios resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolBios"
+        },
+        "BypassBIOSPwFlag": {
+          "type": "boolean",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolChassis": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Chassis resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolChassis"
+        },
+        "EngineeringChangeLevel": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FruPartNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureDate": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureWeek": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureYear": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeBackplaneModelName": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeBackplaneSerialNo": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeChassisPartNo": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeChassisSerialNo": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeConfigurationID": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeNodes": {
+          "type": "array",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeNodesUri": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeSelfID": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeSystemPartNo": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeSystemSerialNo": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MultiNodeTwinType": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolComputerSystem": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a ComputerSystem resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolComputerSystem"
+        },
+        "AggregateServerHealth": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "BatteryRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "CPURollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ChassisServiceTag": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "CoolingRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "CurrentRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "EstimatedExhaustTemperatureCelsius": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "EstimatedSystemAirflowCFM": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ExpressServiceCode": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FanRedundancy": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FanRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "IntrusionRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "LicensingRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "NodeID": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "PCAPartNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "PSRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "PlatformGUID": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "PostState": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "SDCardRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "SELRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "StorageRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "SystemHealthRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "TempRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "TempStatisticsRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "VoltRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolDrive": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Drive resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolDrive"
+        },
+        "HpeSmartStorage": {
+          "$ref": "#/definitions/HpeSmartStorage"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolEnvironmentMetrics": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a EnvironmentMetrics resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolEnvironmentMetrics"
+        },
+        "AverageFanPWM": {
+          "type": "number",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolFan": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Fan resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolFan"
+        },
+        "FanPWM": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolLogEntry": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a LogEntry resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolLogEntry"
+        },
+        "AffectedIndicatorLEDs": {
+          "type": "array",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "AuxiliaryData": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Categories": {
+          "type": "array",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Category": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Class": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ClassDescription": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Code": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Comment": {
+          "type": "null",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "CommonEventID": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Count": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "EventFlag": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "EventNumber": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "EventSequenceNumber": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "EventType": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FQDD": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FailingFRU": {
+          "type": "array",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Hidden": {
+          "type": "boolean",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Interface": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "IsLocalEvent": {
+          "type": "boolean",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "LastUpdatedByUser": {
+          "type": "null",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "LearnMoreLink": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "LenovoMessageID": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "MarkAsAcknowledged": {
+          "type": "boolean",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "RawDebugLogURL": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "RawEventData": {
+          "type": "object",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "RecommendedAction": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "RelatedEventID": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Repaired": {
+          "type": "boolean",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ReportingChain": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Serviceable": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Source": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "SubSystem": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "TSLVersion": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "TotalSequenceNumber": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "User": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "UserAction": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolMemory": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Memory resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolMemory"
+        },
+        "EccBits": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FruPartNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureDate": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureWeek": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureYear": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolNetworkAdapter": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a NetworkAdapter resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolNetworkAdapter"
+        },
+        "EngineeringChangeLevel": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FcPorts": {
+          "type": "array",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Firmware": {
+          "type": "object",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FruPartNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "Location": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureDate": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureWeek": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureYear": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "PhysicalPorts": {
+          "type": "array",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "StructuredName": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "UEFIDevicePath": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "UUID": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolPort": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Port resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolPort"
+        },
+        "PhysicalPortNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolPower": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Power resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolPower"
+        },
+        "EngineeringChangeLevel": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FruPartNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureDate": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureWeek": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureYear": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "SensorNumber": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolPowerSupply": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a PowerSupply resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolPowerSupply"
+        },
+        "FruPartNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolSoftwareInventory": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a SoftwareInventory resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolSoftwareInventory"
+        },
+        "FirmwareInventory": {
+          "type": "object",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolStorage": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Storage resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolStorage"
+        },
+        "ControllerBattery": {
+          "type": "object",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "HpeSmartStorage": {
+          "$ref": "#/definitions/HpeSmartStorage"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolStorageController": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a StorageController resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolStorageController"
+        },
+        "EngineeringChangeLevel": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "FruPartNumber": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "HpeSmartStorage": {
+          "$ref": "#/definitions/HpeSmartStorage"
+        },
+        "ManufactureDate": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureWeek": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
+        "ManufactureYear": {
+          "type": "integer",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        }
+      },
+      "additionalProperties": false
+    },
+    "RedpoolVolume": {
+      "type": "object",
+      "description": "Redpool-normalized vendor data on a Volume resource.",
+      "properties": {
+        "@odata.type": {
+          "type": "string",
+          "const": "#Redpool.v1_0_0.RedpoolVolume"
+        },
+        "HpeSmartStorage": {
+          "$ref": "#/definitions/HpeSmartStorage"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
