@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 # Stage: src — workspace files shared by the per-package builders.
 # -----------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS src
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS src
 
 # uv stays in the builder. The runtime stages do not copy it.
 COPY --from=ghcr.io/astral-sh/uv:0.5@sha256:7bff3c3776ec467fc1437960f2c469d8beb30f536a6465a3350c647ccd260ec2 /uv /usr/local/bin/uv
@@ -42,7 +42,7 @@ RUN uv sync --frozen --no-dev --package redfish-snapshot
 # -----------------------------------------------------------------------------
 # Stage: redpool — Redfish normalizing MITM proxy
 # -----------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS redpool
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS redpool
 
 LABEL org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.vendor="Asama Inc." \
@@ -76,7 +76,7 @@ ENTRYPOINT ["redpool-proxy", "--listen-host", "0.0.0.0", "--listen-port", "8080"
 # -----------------------------------------------------------------------------
 # Stage: snapshot — Redfish API snapshot/capture (one-shot CLI)
 # -----------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS redfish-snapshot
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS redfish-snapshot
 
 LABEL org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.vendor="Asama Inc." \
