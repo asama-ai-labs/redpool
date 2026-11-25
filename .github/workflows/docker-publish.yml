@@ -50,19 +50,19 @@ jobs:
         run: uv sync --frozen --all-packages --all-extras --python 3.12
 
       - name: Lint with ruff
-        run: uv run ruff check .
+        run: uv run --no-sync --python 3.12 ruff check .
 
       - name: Check formatting with ruff
-        run: uv run ruff format --check .
+        run: uv run --no-sync --python 3.12 ruff format --check .
 
       - name: Type check redpool with mypy
-        run: uv run mypy redpool
+        run: uv run --no-sync --python 3.12 mypy redpool
 
       - name: Run tests
-        run: uv run pytest -q
+        run: uv run --no-sync --python 3.12 pytest -q
 
       - name: Validate normalized fixtures against the pinned DMTF schemas
-        run: uv run python scripts/validate_redfish_schema.py --strict
+        run: uv run --no-sync --python 3.12 python scripts/validate_redfish_schema.py --strict
 
   build:
     name: Build (${{ matrix.image_name }})
