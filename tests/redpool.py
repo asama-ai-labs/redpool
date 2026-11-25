@@ -5,18 +5,18 @@ import argparse
 import difflib
 import json
 import logging
-import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from redfish.rest.v1 import HttpClient
 
 from normalizers.url_rewrites import reverse_rewrite_path
 from redpool.cache import InMemoryCache
-from redpool.mockup import iter_mockup_files, relpath_to_uri, uri_to_relpath
+from redpool.mockup import iter_mockup_files, relpath_to_uri
+from redpool.redfish_client import redfish_get_json
+from scripts.mockup_server import mockup_redfish_client
 from redpool.proxy import RedfishProxy
 
 pytestmark = pytest.mark.requires_fixtures
@@ -37,88 +37,6 @@ root_logger = logging.getLogger()
 root_logger.setLevel(loglevel)
 for handler in root_logger.handlers:
     handler.setLevel(loglevel)
-
-
-class MockRedfishClient(HttpClient):
-    """Mock Redfish client that returns responses from test data files."""
-
-    def __init__(self, vendor_dir):
-        self.vendor_dir = vendor_dir
-        self.input_dir = os.path.join(vendor_dir, "original")
-        base_url = f"https://mock-{os.path.basename(vendor_dir)}.example.com"
-
-        super().__init__(
-            base_url=base_url,
-            username="mock_user",
-            password="mock_password",
-            default_prefix="/redfish/v1/",
-            check_connectivity=False,
-        )
-
-        self._original_rest_request = self._rest_request
-        self._rest_request = self._mock_rest_request
-
-    def _mock_rest_request(
-        self,
-        path="",
-        method="GET",
-        args=None,
-        body=None,
-        headers=None,
-        allow_redirects=True,
-        timeout=None,
-        max_retry=None,
-    ):
-        if method.upper() == "GET":
-            return self._create_mock_response(path)
-        mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.dict = {}
-        # Mirror a real RestResponse: .dict is parsed from the decoded text.
-        mock_response.text = "{}"
-        mock_response.getheader.return_value = "application/json"
-        return mock_response
-
-    def _create_mock_response(self, path):
-        file_path = os.path.join(self.input_dir, uri_to_relpath(path))
-
-        logger.debug(f"MockRedfishClient: Attempting to get file: {file_path}")
-
-        if not os.path.exists(file_path):
-            alt_path = reverse_rewrite_path(file_path)
-            if alt_path != file_path and os.path.exists(alt_path):
-                file_path = alt_path
-            else:
-                # A real BMC answers a missing resource with 404, not a Python error.
-                logger.debug(f"Test data file not found, returning 404: {file_path}")
-                mock_response = MagicMock()
-                mock_response.status = 404
-                mock_response.dict = {}
-                mock_response.text = "{}"
-                mock_response.getheader.return_value = "application/json"
-                return mock_response
-
-        with open(file_path, "r") as f:
-            data = json.load(f)
-
-        mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.dict = data
-        mock_response.text = json.dumps(data)
-        mock_response.getheader.return_value = "application/json"
-
-        odata_type = data.get("@odata.type", "No @odata.type found")
-        logger.debug(
-            f"MockRedfishClient: Loaded data for {path} with @odata.type: {odata_type}"
-        )
-        return mock_response
-
-    def get(self, path, args=None, headers=None):
-        """Match gofish ``HttpClient.get`` arity so ``redfish_get_json`` prefetch works in tests."""
-        return self._create_mock_response(path)
-
-    def get_base_url(self):
-        return getattr(self, "base_url", "") or self.vendor_dir
 
 
 def print_json_diff(expected, actual):
@@ -220,7 +138,6 @@ class TestRedfishNormalization(unittest.TestCase):
                 if not original_dir.is_dir() or not normalized_dir.is_dir():
                     continue
 
-                mock_client = MockRedfishClient(str(model_dir))
                 self.mock_extract_metadata.return_value = ServerMetadata(
                     hostname=f"{model_name.lower()}.example.com",
                     vendor=vendor_name,
@@ -231,59 +148,62 @@ class TestRedfishNormalization(unittest.TestCase):
                 if not golden_files:
                     continue
 
-                for golden_path in golden_files:
-                    rel = golden_path.relative_to(normalized_dir)
-                    original_rel = Path(reverse_rewrite_path(str(rel)))
-                    original_path = original_dir / original_rel
-                    redfish_path = _rel_to_redfish_path(rel)
-                    tag = f"{vendor_name}/{model_name} {redfish_path}"
+                with mockup_redfish_client(model_dir) as client:
+                    for golden_path in golden_files:
+                        rel = golden_path.relative_to(normalized_dir)
+                        original_rel = Path(reverse_rewrite_path(str(rel)))
+                        original_path = original_dir / original_rel
+                        redfish_path = _rel_to_redfish_path(rel)
+                        tag = f"{vendor_name}/{model_name} {redfish_path}"
 
-                    with self.subTest(tag=tag):
-                        if not original_path.exists():
+                        with self.subTest(tag=tag):
+                            if not original_path.exists():
+                                logger.info(
+                                    "[%s/%s] SKIP %s (synthetic, no original)",
+                                    vendor_name,
+                                    model_name,
+                                    redfish_path,
+                                )
+                                continue
+
+                            normalizer = self.redfish_proxy.get_normalizer_for_path(
+                                redfish_path,
+                                client,
+                            )
+                            self.assertIsNotNone(
+                                normalizer,
+                                f"No normalizer resolved for {redfish_path}",
+                            )
+
+                            input_data = redfish_get_json(client, redfish_path)
+                            self.assertTrue(
+                                input_data, f"No HTTP response body for {redfish_path}"
+                            )
+                            with open(golden_path) as f:
+                                expected = json.load(f)
+
+                            actual = self.redfish_proxy.normalize_redfish_response(
+                                response_data=input_data,
+                                response_normalizer=normalizer,
+                                vendor=vendor_name,
+                                redfish_client=client,
+                                resource_path=redfish_path,
+                            )
+
+                            if actual != expected:
+                                diff = print_json_diff(expected, actual)
+                                self.fail(
+                                    f"Normalizer output differs from golden file "
+                                    f"for {redfish_path}:\n{diff}"
+                                )
+
+                            tested += 1
                             logger.info(
-                                "[%s/%s] SKIP %s (synthetic, no original)",
+                                "[%s/%s] OK  %s",
                                 vendor_name,
                                 model_name,
                                 redfish_path,
                             )
-                            continue
-
-                        normalizer = self.redfish_proxy.get_normalizer_for_path(
-                            redfish_path,
-                            mock_client,
-                        )
-                        self.assertIsNotNone(
-                            normalizer,
-                            f"No normalizer resolved for {redfish_path}",
-                        )
-
-                        with open(original_path) as f:
-                            input_data = json.load(f)
-                        with open(golden_path) as f:
-                            expected = json.load(f)
-
-                        actual = self.redfish_proxy.normalize_redfish_response(
-                            response_data=input_data,
-                            response_normalizer=normalizer,
-                            vendor=vendor_name,
-                            redfish_client=mock_client,
-                            resource_path=redfish_path,
-                        )
-
-                        if actual != expected:
-                            diff = print_json_diff(expected, actual)
-                            self.fail(
-                                f"Normalizer output differs from golden file "
-                                f"for {redfish_path}:\n{diff}"
-                            )
-
-                        tested += 1
-                        logger.info(
-                            "[%s/%s] OK  %s",
-                            vendor_name,
-                            model_name,
-                            redfish_path,
-                        )
 
         self.assertGreater(
             tested,

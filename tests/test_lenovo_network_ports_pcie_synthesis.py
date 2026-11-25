@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from redpool.proxy import RedfishProxy, ServerMetadata
-from tests.redpool import MockRedfishClient
+from scripts.mockup_server import mockup_redfish_client
 
 pytestmark = pytest.mark.requires_fixtures
 
@@ -20,13 +20,13 @@ _LENOVO_SR630_V2 = _REPO / "fixtures" / "Lenovo" / "ThinkSystem_SR630_V2"
 
 
 def _proxy(metadata: ServerMetadata, path: str):
-    client = MockRedfishClient(str(_LENOVO_SR630_V2))
     proxy = RedfishProxy()
-    return proxy.proxy_request(
-        path,
-        backend_client=client,
-        server_metadata=metadata,
-    )
+    with mockup_redfish_client(_LENOVO_SR630_V2) as client:
+        return proxy.proxy_request(
+            path,
+            backend_client=client,
+            server_metadata=metadata,
+        )
 
 
 class TestLenovoNetworkPortsPcieSynthesis(unittest.TestCase):

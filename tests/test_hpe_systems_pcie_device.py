@@ -12,7 +12,7 @@ import pytest
 from redpool.cache import InMemoryCache
 from redpool.proxy import RedfishProxy, ServerMetadata
 from redpool.schema_validator import validate_document
-from tests.redpool import MockRedfishClient
+from scripts.mockup_server import mockup_redfish_client
 
 pytestmark = pytest.mark.requires_fixtures
 
@@ -22,7 +22,8 @@ _DL360 = (
 
 
 def test_rewritten_systems_pcie_device_is_schema_valid() -> None:
-    client = MockRedfishClient(str(_DL360))
+    if not (_DL360 / "original").is_dir():
+        pytest.skip("DL360 Gen10 fixture is unavailable")
     proxy = RedfishProxy()
     proxy.objecttype_cache = InMemoryCache(ttl_seconds=60)
     path = "/redfish/v1/Systems/1/PCIeDevices/192"
@@ -31,13 +32,14 @@ def test_rewritten_systems_pcie_device_is_schema_valid() -> None:
         vendor="HPE",
         model="ProLiant DL360 Gen10",
     )
-    body, _meta, status, _norm, _headers = proxy.proxy_request(
-        path,
-        method="GET",
-        redfish_endpoint="http://mock.example.com",
-        backend_client=client,
-        server_metadata=meta,
-    )
+    with mockup_redfish_client(_DL360) as client:
+        body, _meta, status, _norm, _headers = proxy.proxy_request(
+            path,
+            method="GET",
+            redfish_endpoint=client.get_base_url(),
+            backend_client=client,
+            server_metadata=meta,
+        )
     assert status == 200
     assert isinstance(body, dict)
     assert "Bifurcated" not in body

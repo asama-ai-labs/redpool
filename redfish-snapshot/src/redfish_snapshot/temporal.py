@@ -3,7 +3,8 @@
 
 """Mask when and where a capture was taken: time zones, timestamps and uptime counters.
 
-Event timestamps share a capture-specific shift to preserve ordering and durations.
+Each Redfish log stream has its own shift to preserve ordering and durations within it.
+Other event timestamps share a capture-specific shift.
 Certificate validity bypasses the shift. Power-monitor epochs use synthetic instants.
 Zones become UTC, manufacture and licence dates are rounded, and uptime counters are scaled.
 
@@ -13,6 +14,7 @@ The pass is applied once per capture. ``metadata.json`` records the version as `
 
 from __future__ import annotations
 
+import base64
 import hmac
 import re
 from datetime import datetime, timedelta, timezone
@@ -59,7 +61,36 @@ _YEAR_MIN, _YEAR_MAX = 2000, 2100
 _EPOCH_ID_RE = re.compile(r"(?<!\d)(\d{16}|\d{13})(?!\d)")
 _EPOCH_ID_LEAVES = frozenset({"Id", "@odata.id"})
 _EPOCH_RANGE = (1_420_070_400, 2_051_222_400)  # 2015-01-01 to 2035-01-01, in seconds
-TIME_POLICY_VERSION = 3
+TIME_POLICY_VERSION = 4
+_LOG_STREAM_RE = re.compile(
+    r"(?P<stream>/?redfish/v1/(?:[^/?#\s\"'<>]+/)*LogServices/[^/?#\s\"'<>]+/Entries)(?=/|[?#]|$)"
+)
+_LOG_EPOCH_ID_RE = re.compile(r"(?P<epoch>\d{16}|\d{13}|\d{10})(?:_\d+)?")
+_LOG_ENTRY_URL_RE = re.compile(
+    _LOG_STREAM_RE.pattern
+    + r"/(?P<entry>(?:\d{16}|\d{13}|\d{10})(?:_\d+)?)(?=[/?#\s\"'<>]|$)"
+)
+
+
+def has_log_epoch_url(text: str) -> bool:
+    return any(
+        is_log_epoch_id(match["entry"]) for match in _LOG_ENTRY_URL_RE.finditer(text)
+    )
+
+
+def log_stream(uri: str) -> str | None:
+    match = _LOG_STREAM_RE.search(uri)
+    return "/" + match["stream"].lstrip("/") if match else None
+
+
+def is_log_epoch_id(value: str) -> bool:
+    match = _LOG_EPOCH_ID_RE.fullmatch(value)
+    if not match:
+        return False
+    seconds = int(match["epoch"][:10])
+    return _EPOCH_RANGE[0] <= seconds <= _EPOCH_RANGE[1]
+
+
 _POWER_EPOCH_KEYS = {
     "ServerPwrMon.1." + field
     for field in (
@@ -118,6 +149,10 @@ class TemporalMasker:
     """One capture's time masking, keyed by a secret and the capture's name."""
 
     def __init__(self, secret: bytes, capture: str) -> None:
+        self._secret = secret
+        self._capture = capture
+        self._streams: dict[str, TemporalMasker] = {}
+        self._log_aliases: dict[tuple[str, str], str] = {}
         digest = hmac.new(secret, capture.encode(), "sha256").hexdigest()
         # 40 to 399 days into the past, plus up to a day of seconds.
         days = 40 + int(digest[:4], 16) % 360
@@ -125,6 +160,44 @@ class TemporalMasker:
         self.shift = timedelta(seconds=-(days * 86400 + seconds))
         # Cumulative counters scale by 0.85 to 1.14, the same for every counter of a capture.
         self._counter_factor = 0.85 + (int(digest[8:12], 16) % 30) / 100
+
+    def _log_id(self, stream: str, entry: str) -> str:
+        if not is_log_epoch_id(entry):
+            return entry
+        if (stream, entry) in self._log_aliases:
+            return self._log_aliases[stream, entry]
+        message = f"log-id\0{self._capture}\0{stream}\0{entry}".encode()
+        digest = hmac.digest(self._secret, message, "sha256")
+        return "DUMMY-Log-" + base64.b32encode(digest[:10]).decode("ascii")
+
+    def register_log_entry(self, file_uri: str, resource_uri: str) -> None:
+        """Join a legacy shifted filename to the raw resource URI before rewriting."""
+        stream = log_stream(file_uri)
+        if stream is None or stream != log_stream(resource_uri):
+            return
+        file_id, resource_id = (
+            uri.rstrip("/").rsplit("/", 1)[-1] for uri in (file_uri, resource_uri)
+        )
+        if is_log_epoch_id(file_id) and (
+            is_log_epoch_id(resource_id) or resource_id.startswith("DUMMY-Log-")
+        ):
+            self._log_aliases[stream, file_id] = self._log_id(stream, resource_id)
+
+    def rewrite_log_urls(self, text: str) -> str:
+        def replace(match: re.Match) -> str:
+            prefix = match["stream"]
+            entry = match["entry"]
+            return f"{prefix}/{self._log_id('/' + prefix.lstrip('/'), entry)}"
+
+        # Match the entry as well as the stream, including duplicate suffixes.
+        return _LOG_ENTRY_URL_RE.sub(replace, text)
+
+    def _stream_masker(self, stream: str) -> TemporalMasker:
+        if stream not in self._streams:
+            self._streams[stream] = TemporalMasker(
+                self._secret, f"log-time\0{self._capture}\0{stream}"
+            )
+        return self._streams[stream]
 
     @staticmethod
     def _as_utc_label(m: re.Match) -> str:
@@ -217,6 +290,7 @@ class TemporalMasker:
         self, text: str, *, legacy_timestamps: Optional[dict[str, str]] = None
     ) -> str:
         """Shift resource IDs consistently in paths and metadata URLs."""
+        text = self.rewrite_log_urls(text)
         if legacy_timestamps is None:
             return self.shift_text(self._shift_epoch_ids(text))
 
@@ -255,10 +329,19 @@ class TemporalMasker:
         return text
 
     def mask(
-        self, data: Any, key: Optional[str] = None, *, legacy: bool = False
+        self,
+        data: Any,
+        key: Optional[str] = None,
+        *,
+        legacy: bool = False,
+        stream: str | None = None,
+        log_time_only: bool = False,
     ) -> Any:
         """Return *data* with its times and counters masked."""
         if isinstance(data, dict):
+            uri = data.get("@odata.id")
+            if isinstance(uri, str):
+                stream = log_stream(uri) or stream
             if not legacy and _leaf(key) == "TimeZone" and "UtcOffset" in data:
                 return dict(_UTC_HPE_ZONE)
             certificate = certificate_document(data)
@@ -269,7 +352,11 @@ class TemporalMasker:
                 ):
                     out[k] = v
                 else:
-                    out[k] = self.mask(v, k, legacy=legacy)
+                    out[k] = self.mask(
+                        v, k, legacy=legacy, stream=stream, log_time_only=log_time_only
+                    )
+            if log_time_only:
+                return out
             _mask_power_epochs(out)
             stamp = data.get("Timestamp")
             if isinstance(stamp, str) and (
@@ -289,11 +376,24 @@ class TemporalMasker:
                     out["Timestamp"] = _display_time(instant)
             return out
         if isinstance(data, list):
-            return [self.mask(v, key, legacy=legacy) for v in data]
+            return [
+                self.mask(
+                    v, key, legacy=legacy, stream=stream, log_time_only=log_time_only
+                )
+                for v in data
+            ]
         if isinstance(data, str):
+            if stream and key == "Id" and is_log_epoch_id(data):
+                return self._log_id(stream, data)
+            data = self.rewrite_log_urls(data)
+            if stream:
+                return self._stream_masker(stream)._string(key, data, False)
+            if log_time_only:
+                return data
             return self._string(key, data, legacy)
         if (
             not legacy
+            and not log_time_only
             and isinstance(data, int)
             and not isinstance(data, bool)
             and data > 0

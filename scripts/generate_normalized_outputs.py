@@ -35,8 +35,12 @@ from redpool.mockup import (
     uri_to_relpath,
 )
 from redpool.proxy import RedfishProxy, ServerMetadata
-from tests.redpool import MockRedfishClient
 from normalizers.url_rewrites import reverse_rewrite_path, rewrite_path
+
+if __package__:
+    from .mockup_server import mockup_redfish_client
+else:
+    from mockup_server import mockup_redfish_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -204,19 +208,28 @@ def generate_for_model(
 ):
     model_name = os.path.basename(model_dir)
     original_dir = os.path.join(model_dir, "original")
-    output_dir = os.path.join(model_dir, "normalized")
 
     if not os.path.isdir(original_dir):
         log.warning("[%s/%s] No original/ directory, skipping", vendor_name, model_name)
         return
 
+    with mockup_redfish_client(Path(model_dir)) as client:
+        _generate_normalized_tree(
+            proxy, vendor_name, model_dir, max_collection_sample, client
+        )
+
+
+def _generate_normalized_tree(
+    proxy, vendor_name, model_dir, max_collection_sample, client
+):
+    model_name = os.path.basename(model_dir)
+    original_dir = os.path.join(model_dir, "original")
+    output_dir = os.path.join(model_dir, "normalized")
     collection_keep = _discover_collections(original_dir, max_collection_sample)
-    mock_client = MockRedfishClient(model_dir)
-    base_url = f"https://{model_name.lower().replace('_', '-')}.example.com"
-    mock_client.get_base_url = lambda: base_url
+    base_url = client.get_base_url()
     # Directory names can carry a host suffix (PowerEdge_R630_2). The silk maps
     # key on the platform model the live proxy reads from Product or Systems.Model.
-    detected = proxy._extract_server_metadata(base_url, mock_client)
+    detected = proxy._extract_server_metadata(base_url, client)
     if detected is not None and proxy._product_is_server_model(detected.model):
         model = detected.model
     else:
@@ -250,8 +263,8 @@ def generate_for_model(
             body, _meta, status, _norm, _headers = proxy.proxy_request(
                 path,
                 method="GET",
-                redfish_endpoint="http://mock.example.com",
-                backend_client=mock_client,
+                redfish_endpoint=base_url,
+                backend_client=client,
                 server_metadata=server_metadata,
             )
         except Exception as e:
@@ -390,6 +403,7 @@ def generate_for_model(
 
 
 def main():
+    logging.getLogger("redfish.rest.v1").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(description=__doc__)
     repo_root = Path(__file__).resolve().parent.parent
     parser.add_argument(

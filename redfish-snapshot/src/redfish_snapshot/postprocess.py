@@ -35,7 +35,7 @@ from redfish_snapshot.sanitize import (
     sanitize_resource_tokens,
     standard_boot_certificate_uri,
 )
-from redfish_snapshot.temporal import TIME_POLICY_VERSION, TemporalMasker
+from redfish_snapshot.temporal import TIME_POLICY_VERSION, TemporalMasker, log_stream
 
 _DIRGROUP_RE = RedfishSanitizer.DIRGROUP_RE
 STATE_ENV = "REDPOOL_SANITIZE_STATE"
@@ -313,6 +313,27 @@ def sanitize_mockups(
     if mask_time and not time_secret:
         raise ValueError("mask_time needs time_secret")
 
+    # One time masker per capture, none for a capture that already has the marker.
+    time_maskers: dict[Path, TemporalMasker] = {}
+    legacy_timestamps: dict[Path, dict[str, str]] = {}
+    log_time_only: set[Path] = set()
+    if mask_time:
+        for root in roots:
+            version = _time_policy_version(root)
+            if version >= TIME_POLICY_VERSION:
+                log(f"  {server_key(root)}: time policy already applied, skipped")
+                continue
+            if version in (1, 2, 3):
+                legacy_timestamps[root] = {}
+            if version == 3:
+                log_time_only.add(root)
+            capture = "/".join(root.resolve().parent.parts[-2:])
+            time_maskers[root] = TemporalMasker(time_secret, capture)
+        for root in time_maskers:
+            meta = root.parent / "metadata.json"
+            if meta.is_file() and meta not in metadata_files:
+                metadata_files.append(meta)
+
     tokens: set[str] = set()
     public_dates = {}
     last_report_number = 0
@@ -330,6 +351,15 @@ def sanitize_mockups(
                     last_report_number = max(last_report_number, int(match[1]))
                 doc = json.loads(raw)
                 found.update(collect_identifiers(doc))
+                if (
+                    root in time_maskers
+                    and p.name == "index.json"
+                    and isinstance(doc, dict)
+                    and isinstance(resource_uri := doc.get("@odata.id"), str)
+                ):
+                    time_maskers[root].register_log_entry(
+                        p.parent.relative_to(root).as_posix(), resource_uri
+                    )
                 if isinstance(doc, dict) and (
                     uri := standard_boot_certificate_uri(doc)
                 ):
@@ -355,24 +385,6 @@ def sanitize_mockups(
         root: IdentifierMasker(found, id_map=id_map)
         for root, found in identifiers.items()
     }
-
-    # One time masker per capture, none for a capture that already has the marker.
-    time_maskers: dict[Path, TemporalMasker] = {}
-    legacy_timestamps: dict[Path, dict[str, str]] = {}
-    if mask_time:
-        for root in roots:
-            version = _time_policy_version(root)
-            if version >= TIME_POLICY_VERSION:
-                log(f"  {server_key(root)}: time policy already applied, skipped")
-                continue
-            if version in (1, 2):
-                legacy_timestamps[root] = {}
-            capture = "/".join(root.resolve().parent.parts[-2:])
-            time_maskers[root] = TemporalMasker(time_secret, capture)
-        for root in time_maskers:
-            meta = root.parent / "metadata.json"
-            if meta.is_file() and meta not in metadata_files:
-                metadata_files.append(meta)
 
     doc_root = {p: root for root in roots for p in root.rglob("*.json")}
     documents = sorted(doc_root)
@@ -408,7 +420,12 @@ def sanitize_mockups(
                     legacy_timestamps[root].update(
                         time_masker.legacy_path_timestamps(path, resource_id)
                     )
-            sanitized = time_masker.mask(sanitized, legacy=root in legacy_timestamps)
+            sanitized = time_masker.mask(
+                sanitized,
+                legacy=root in legacy_timestamps,
+                stream=log_stream(p.relative_to(root).as_posix()),
+                log_time_only=root in log_time_only,
+            )
         if _strip_etags(sanitized) == _strip_etags(data):
             # The body is as it was: keep its etag unless it hashes some other body.
             sanitized = data
@@ -452,12 +469,16 @@ def sanitize_mockups(
                     out["collection_timestamp"]
                 )
             if isinstance(out.get("collected_urls"), list):
-                out["collected_urls"] = _walk(
-                    out["collected_urls"],
-                    lambda url: time_masker.shift_path(
-                        url, legacy_timestamps=legacy_timestamps.get(root)
-                    ),
+                rewrite_url = (
+                    time_masker.rewrite_log_urls
+                    if root in log_time_only
+                    else (
+                        lambda url: time_masker.shift_path(
+                            url, legacy_timestamps=legacy_timestamps.get(root)
+                        )
+                    )
                 )
+                out["collected_urls"] = _walk(out["collected_urls"], rewrite_url)
             if root in legacy_timestamps:
                 legacy_metadata[p] = (out, raw)
             else:
@@ -473,8 +494,11 @@ def sanitize_mockups(
             time_masker = time_maskers[root]
 
             def mask_path(text):
+                text = masker.mask(text)
+                if root in log_time_only:
+                    return time_masker.rewrite_log_urls(text)
                 return time_masker.shift_path(
-                    masker.mask(text), legacy_timestamps=legacy_timestamps.get(root)
+                    text, legacy_timestamps=legacy_timestamps.get(root)
                 )
         else:
             mask_path = masker.mask

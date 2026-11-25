@@ -53,7 +53,14 @@ from redfish_snapshot.sanitize import (  # noqa: E402
     sanitize_redfish,
     standard_boot_certificate_uri,
 )
-from redfish_snapshot.temporal import CTIME_RE, _mask_power_epochs, paired_display_time  # noqa: E402
+from redfish_snapshot.temporal import (  # noqa: E402
+    CTIME_RE,
+    _mask_power_epochs,
+    has_log_epoch_url,
+    is_log_epoch_id,
+    log_stream,
+    paired_display_time,
+)
 
 PLACEHOLDER_MACS = {RedfishSanitizer.DUMMY_MAC, RedfishSanitizer.DUMMY_WWN}
 
@@ -245,11 +252,16 @@ def check_document(data, is_original):
     """Checks that need the parsed document. S-ETAG applies to captures only: a normalized
     document copies its etag from the capture, whose body is public anyway."""
 
-    def temporal_issues(node):
+    def temporal_issues(node, stream=None):
         if isinstance(node, list):
             for item in node:
-                yield from temporal_issues(item)
+                yield from temporal_issues(item, stream)
         elif isinstance(node, dict):
+            uri = node.get("@odata.id")
+            if isinstance(uri, str):
+                stream = log_stream(uri) or stream
+            if stream and is_log_epoch_id(str(node.get("Id", ""))):
+                yield "S-TIME", "epoch log entry Id"
             if "Timestamp" in node and (expected := paired_display_time(node)):
                 if node["Timestamp"] != expected:
                     yield "S-TIME", "Timestamp/TimestampWithTZ"
@@ -259,7 +271,9 @@ def check_document(data, is_original):
                 if expected_power != node:
                     yield "S-TIME", "ServerPwrMon"
             for child in node.values():
-                yield from temporal_issues(child)
+                yield from temporal_issues(child, stream)
+        elif isinstance(node, str) and has_log_epoch_url(node):
+            yield "S-TIME", "epoch log entry URL"
 
     yield from temporal_issues(data)
     body = _compact(_strip_etags(data))
@@ -398,6 +412,8 @@ def scan(fixtures: Path, vendor, model, state: Path | None):
                 continue
             seen = set()
             results = list(check_text(rel, text, masker))
+            if has_log_epoch_url(rel):
+                results.append(("S-TIME", "epoch log entry path"))
             if path.suffix == ".json":
                 try:
                     data = json.loads(text)

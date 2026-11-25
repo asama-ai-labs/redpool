@@ -36,3 +36,14 @@ def test_temporal_checks_detect_inconsistent_pairs_and_raw_epochs():
         ("S-TIME", "Timestamp/TimestampWithTZ"),
         ("S-TIME", "ServerPwrMon"),
     }
+
+
+def test_epoch_log_ids_in_nested_entries_and_metadata_are_flagged():
+    from scripts.check_fixture_leaks import check_document
+
+    uri = "/redfish/v1/Systems/1/LogServices/EventLog/Entries"
+    entry_id = "1769357212_1"
+    doc = {"@odata.id": uri, "Members": [{"Id": entry_id}]}
+    assert ("S-TIME", "epoch log entry Id") in set(check_document(doc, True))
+    metadata = {"collected_urls": [f"{uri}/{entry_id}"]}
+    assert set(check_document(metadata, False)) == {("S-TIME", "epoch log entry URL")}

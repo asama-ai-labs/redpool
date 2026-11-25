@@ -4,6 +4,7 @@
 """Leak-review rules: identifiers hidden in other keys, encodings and free text."""
 
 import json
+from datetime import datetime, timedelta
 
 from redfish_snapshot.postprocess import sanitize_mockups
 from redfish_snapshot.sanitize import (
@@ -767,3 +768,99 @@ def test_public_boot_certificate_uses_oem_validity_after_upgrade(tmp_path):
     assert data["ValidNotBefore"] == "2020-04-01T01:02:03Z"
     assert data["ValidNotAfter"] == "2030-04-01T01:02:03Z"
     assert sanitize_mockups([root], **kwargs) == (0, 0, 0)
+
+
+def test_log_streams_have_independent_shifts_and_consistent_entry_copies():
+    masker = _masker()
+    journal = "/redfish/v1/Managers/1/LogServices/Journal/Entries"
+    eventlog = "/redfish/v1/Systems/1/LogServices/EventLog/Entries"
+    raw = {"Id": "1769357212_1", "Created": "2026-01-25T15:00:00Z"}
+    first = {**raw, "@odata.id": journal + "/" + raw["Id"]}
+    other = {**raw, "@odata.id": eventlog + "/" + raw["Id"]}
+    collection = masker.mask({"@odata.id": journal, "Members": [first, other]})
+    assert collection["Members"] == [masker.mask(first), masker.mask(other)]
+    a, b = collection["Members"]
+    assert a["Created"] != b["Created"]
+    assert a["Id"] != b["Id"]
+    assert a["Id"].startswith("DUMMY-Log-")
+    assert a["@odata.id"] == journal + "/" + a["Id"]
+    assert a["@odata.id"] == masker.shift_path(first["@odata.id"])
+    later = masker.mask({**first, "Created": "2026-01-25T15:00:07Z"})
+    assert datetime.fromisoformat(later["Created"]) - datetime.fromisoformat(
+        a["Created"]
+    ) == timedelta(seconds=7)
+
+
+def test_v3_upgrade_joins_raw_links_to_legacy_shifted_paths(tmp_path):
+    root = tmp_path / "Vendor" / "Model" / "original"
+    stream = "/redfish/v1/Managers/1/LogServices/Journal/Entries"
+    uri = stream + "/1770197870798958_1"
+    old_path = stream + "/1766452473798958_1"
+    entry = {
+        "Id": old_path.rsplit("/", 1)[-1],
+        "@odata.id": uri,
+        "Created": "2025-12-23T01:14:33.798958+00:00",
+    }
+    for path, doc in (
+        (old_path, entry),
+        (stream, {"@odata.id": stream, "Members": [entry]}),
+        ("/redfish/v1", {"Created": "2025-01-01T00:00:00Z", "Link": uri}),
+    ):
+        f = root / path.lstrip("/") / "index.json"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(doc))
+    meta = root.parent / "metadata.json"
+    meta.write_text(json.dumps({"time_policy": 3, "collected_urls": [uri, old_path]}))
+    run = dict(mask_time=True, time_secret=b"test", log=lambda _: None)
+
+    sanitize_mockups([root], **run)
+
+    member = json.loads((root / stream.lstrip("/") / "index.json").read_text())[
+        "Members"
+    ][0]
+    public_uri = member["@odata.id"]
+    assert member["Id"] == public_uri.rsplit("/", 1)[-1]
+    assert member["Created"] != entry["Created"]
+    assert (
+        json.loads((root / public_uri.lstrip("/") / "index.json").read_text()) == member
+    )
+    assert json.loads(meta.read_text())["collected_urls"] == [public_uri, public_uri]
+    root_doc = json.loads((root / "redfish/v1/index.json").read_text())
+    assert root_doc == {"Created": "2025-01-01T00:00:00Z", "Link": public_uri}
+    assert sanitize_mockups([root], **run) == (0, 0, 0)
+
+
+def test_masks_dell_session_logout_and_matching_argument():
+    doc = {
+        "Message": "The session for lab-operator from 192.0.2.1 using GUI is logged off.",
+        "MessageArgs": ["lab-operator", "192.0.2.1", "GUI"],
+    }
+    result = _clean(doc)
+    assert "session for DUMMY-User from" in result["Message"]
+    assert result["MessageArgs"] == ["DUMMY-User", "192.0.2.1", "GUI"]
+
+
+def test_drops_linkable_digests_only_from_custom_metric_reports():
+    for collection in ("MetricReports", "MetricReportDefinitions"):
+        oem = {
+            "Dell": {
+                "Digest": "definition",
+                "MetricReportDefinitionDigest": "definition",
+                "Keep": "Value",
+            }
+        }
+        for name in ("custom", "DUMMY-Report-1"):
+            out = _clean(
+                {
+                    "@odata.id": f"/redfish/v1/TelemetryService/{collection}/{name}",
+                    "Oem": oem,
+                }
+            )
+            assert out["Oem"] == {"Dell": {"Keep": "Value"}}
+        out = _clean(
+            {
+                "@odata.id": f"/redfish/v1/TelemetryService/{collection}/CPUSensor",
+                "Oem": oem,
+            }
+        )
+        assert out["Oem"] == oem

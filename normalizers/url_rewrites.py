@@ -20,7 +20,7 @@ URL rewrite behaviour:
 
 The mappings here are used by:
 * ``generate_normalized_outputs.py`` — rewrite output file paths
-* ``tests/redpool.py`` ``MockRedfishClient`` — reverse-rewrite when
+* ``tests/redpool.py`` — reverse-rewrite when
   resolving original files from normalized paths
 * ``redpool/proxy.py`` — rewrite client-facing URLs to upstream BMC paths
 """

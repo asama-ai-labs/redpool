@@ -1117,7 +1117,7 @@ class RedfishProxy:
             redfish_endpoint: The base URL of the Redfish API (ignored if backend_client is provided)
             headers: HTTP headers to include in the request
             body: Request body for POST/PUT methods
-            backend_client: Optional HttpClient to use instead of creating one (e.g. MockRedfishClient)
+            backend_client: Optional HttpClient to use instead of creating one
             server_metadata: Optional server metadata when using backend_client (required if backend_client is set)
 
         Returns:

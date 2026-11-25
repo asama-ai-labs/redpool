@@ -484,6 +484,9 @@ class RedfishSanitizer:
     # Phrases in log text that name an account. Group 1 is the account.
     USER_PATTERNS = (
         re.compile(r"\blog in for (\S+?) from\b"),
+        re.compile(
+            r"\bsession for (\S+) from\b[^\r\n]*?\bis logged off\b", re.IGNORECASE
+        ),
         re.compile(r"\blogged in using (\S+?),"),
         re.compile(r"\bby user (\S+?)(?=[.\s,;)]|$)"),
         re.compile(r"\bUser (\S+?) (?:created|deleted|modified|logged|login)"),
@@ -1380,6 +1383,11 @@ class RedfishSanitizer:
                 for field in ("Id", "Name", "Description"):
                     if sanitized.get(field):
                         sanitized[field] = alias
+                oem = sanitized.get("Oem")
+                dell = oem.get("Dell") if isinstance(oem, dict) else None
+                if isinstance(dell, dict):
+                    dell.pop("Digest", None)
+                    dell.pop("MetricReportDefinitionDigest", None)
         self._mask_session_member_id(sanitized, id_map)
         log_users = self._log_users(sanitized.get("Message"))
         for key in list(sanitized.keys()):

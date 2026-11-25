@@ -12,23 +12,26 @@ import pytest
 
 from redpool.proxy import RedfishProxy, ServerMetadata
 from redpool.schema_validator import validate_document
-from tests.redpool import MockRedfishClient
+from scripts.mockup_server import mockup_redfish_client
 
 
 def _proxy_request(path: str, model: str = "ProLiant_DL380_Gen10_2") -> dict:
     repo = Path(__file__).resolve().parent.parent
-    client = MockRedfishClient(str(repo / "fixtures" / "HPE" / model))
+    model_dir = repo / "fixtures" / "HPE" / model
+    if not (model_dir / "original").is_dir():
+        pytest.skip(f"HPE {model} fixture is unavailable")
     proxy = RedfishProxy()
     metadata = ServerMetadata(
         hostname="mock.example.com",
         vendor="HPE",
         model="ProLiant DL380 Gen10",
     )
-    body, _, status, norm_status, _ = proxy.proxy_request(
-        path,
-        backend_client=client,
-        server_metadata=metadata,
-    )
+    with mockup_redfish_client(model_dir) as client:
+        body, _, status, norm_status, _ = proxy.proxy_request(
+            path,
+            backend_client=client,
+            server_metadata=metadata,
+        )
     assert status == 200
     assert norm_status == "normalized"
     assert isinstance(body, dict)
