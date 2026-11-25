@@ -184,7 +184,36 @@ jobs:
         # covers every tag that points at it.
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        shell: bash
+        run: |
+          if [[ ! "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::Buildx did not return a valid image digest"
+            exit 1
+          fi
+
+          image_ref="${IMAGE}@${DIGEST}"
+          for delay in 5 10 20 0; do
+            # Check registry visibility before requesting a signing certificate.
+            if ! docker buildx imagetools inspect "$image_ref" >/dev/null; then
+              echo "Could not read the pushed manifest $image_ref"
+            elif signing_output=$(cosign sign --yes "$image_ref" 2>&1); then
+              printf '%s\n' "$signing_output"
+              exit 0
+            else
+              printf '%s\n' "$signing_output" >&2
+              # Retry only the manifest HEAD 404 seen after a successful push.
+              if [[ "$signing_output" != *"HEAD "*"/manifests/${DIGEST}"*"404 Not Found"* ]]; then
+                exit 1
+              fi
+            fi
+
+            if (( delay > 0 )); then
+              echo "Retrying $image_ref in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          echo "::error::Could not sign $image_ref after four attempts"
+          exit 1
 
       - name: Publish release summary
         env:
