@@ -70,39 +70,55 @@ def _dec1_bmc_socket(v: int) -> int:
     return v - 1 if v >= 1 else v
 
 
-# ``model_fold`` → max DIMM slots per memory channel (1 / 2 / 3).
-_MODEL_MEMORY_SLOTS_PER_CHANNEL: Dict[str, int] = {
-    "thinksystemsr650v2": 2,
-    "thinksystemsr675v3": 1,
-    "thinksystemsr680av3": 2,
+# SR650 V2 reports the controller and socket-wide channel directly. The table
+# gives the within-channel slot for board DIMMs 1–16 (17–32 on socket 2).
+# https://pubs.lenovo.com/sr650-v2/dimm_installation_rules_2
+_SR650_V2_SLOTS = (0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0)
+
+# Board DIMM number -> (socket, memory controller, socket-wide channel, slot).
+# https://pubs.lenovo.com/sr680a-v3/memory_module_installation_order
+# https://pubs.lenovo.com/sr780a-v3/memory_module_installation_order
+_SR680A_LOCATIONS: Dict[int, _MemoryLocationQuad] = {
+    1: (0, 3, 7, 0),
+    2: (0, 3, 7, 1),
+    3: (0, 3, 6, 0),
+    4: (0, 3, 6, 1),
+    5: (0, 2, 5, 0),
+    6: (0, 2, 5, 1),
+    7: (0, 2, 4, 0),
+    8: (0, 2, 4, 1),
+    9: (0, 0, 0, 1),
+    10: (0, 0, 0, 0),
+    11: (0, 0, 1, 1),
+    12: (0, 0, 1, 0),
+    13: (0, 1, 2, 1),
+    14: (0, 1, 2, 0),
+    15: (0, 1, 3, 1),
+    16: (0, 1, 3, 0),
+    17: (1, 3, 7, 0),
+    18: (1, 3, 7, 1),
+    19: (1, 3, 6, 0),
+    20: (1, 3, 6, 1),
+    21: (1, 2, 5, 0),
+    22: (1, 2, 5, 1),
+    23: (1, 2, 4, 0),
+    24: (1, 2, 4, 1),
+    25: (1, 0, 0, 1),
+    26: (1, 0, 0, 0),
+    27: (1, 0, 1, 1),
+    28: (1, 0, 1, 0),
+    29: (1, 1, 2, 1),
+    30: (1, 1, 2, 0),
+    31: (1, 1, 3, 1),
+    32: (1, 1, 3, 0),
 }
-
-
-def _memory_slots_per_channel(model_fold: str) -> Optional[int]:
-    """Return 1–3 for known models, else ``None`` (caller should passthrough)."""
-    dpc = _MODEL_MEMORY_SLOTS_PER_CHANNEL.get(model_fold)
-    if dpc is None:
-        return None
-    return max(1, min(3, int(dpc)))
-
-
-def _bmc_slot_to_channel_index(model_fold: str, slot: int) -> Optional[int]:
-    """Map 1-based BMC *global* ``slot`` to 0-based index within the channel.
-
-    Uses ``_memory_slots_per_channel(model_fold)``. Returns ``None`` if the model has no
-    DPC entry (caller should not transform ``Slot``).
-
-    * DPC ``1`` (1DPC): always ``0``.
-    * ``2`` (2DPC): ``(slot - 1) % 2``.
-    * ``3`` (3DPC): ``(slot - 1) % 3``.
-    """
-    spc = _memory_slots_per_channel(model_fold)
-    if spc is None:
-        return None
-    spc = max(1, min(3, spc))
-    if spc == 1:
-        return 0
-    return (slot - 1) % spc
+# The combined system model string appears in the ThinkSystem_SR680a_V3_910 capture
+# under fixtures/Lenovo/. Both model manuals above specify the same DIMM layout.
+_SR680A_MODELS = {
+    "thinksystemsr680av3",
+    "thinksystemsr680asr780av3",
+    "thinksystemsr780av3",
+}
 
 
 def lenovo_bmc_to_canonical_memory_location(
@@ -113,15 +129,24 @@ def lenovo_bmc_to_canonical_memory_location(
     slot: int,
 ) -> Optional[_MemoryLocationQuad]:
     """Return canonical ``(Socket, MemoryController, Channel, Slot)``, or ``None`` if unmapped."""
-    slot_idx = _bmc_slot_to_channel_index(model_fold, slot)
-    if slot_idx is None:
+    # SR675 V3 installation guide, Table 1: one DIMM socket per channel.
+    # https://pubs.lenovo.com/sr675-v3/memory_module_installation_order
+    if model_fold == "thinksystemsr675v3":
+        return _dec1_bmc_socket(socket), memory_controller, channel, 0
+
+    if model_fold in _SR680A_MODELS:
+        location = _SR680A_LOCATIONS.get(slot)
+        if location is not None and socket == location[0] + 1:
+            return location
         return None
-    return (
-        _dec1_bmc_socket(socket),
-        memory_controller,
-        channel,
-        slot_idx,
-    )
+
+    if model_fold != "thinksystemsr650v2" or not 1 <= slot <= 32:
+        return None
+
+    board_socket, position = divmod(slot - 1, 16)
+    if socket != board_socket + 1:
+        return None
+    return board_socket, memory_controller, channel, _SR650_V2_SLOTS[position]
 
 
 __all__ = [

@@ -4,9 +4,9 @@ A transparent MITM proxy that normalizes Redfish BMC responses across vendors (D
 
 ## Why
 
-Every server vendor implements the Redfish API differently. The same logical field (e.g., processor speed) lives in different paths, uses different names, or is missing entirely depending on the vendor and firmware version. Redpool sits transparently in front of BMCs and normalizes responses so downstream tools (Prometheus exporters, inventory systems, monitoring dashboards) don't need per-vendor logic.
+Every server vendor implements the Redfish API differently. The same logical field (e.g., processor speed) lives in different paths, uses different names, or is missing entirely depending on the vendor and firmware version. Redpool sits transparently in front of BMCs and normalizes responses so downstream tools (Prometheus exporters, inventory systems, monitoring dashboards, MCP servers etc) don't need per-vendor logic.
 
-**When does redpool matter?** The value shows up against **real BMCs** (or simulators that mimic vendor quirks), not in the mock golden comparison. The mock server serves from `fixtures/.../original/` — **captured JSON from lab servers of commonly used makes** (Dell PowerEdge, HPE ProLiant, Lenovo ThinkSystem, Supermicro). That data may already be compliant or from a single firmware. Real deployments often mix Dell iDRAC, HPE iLO, Lenovo XCC, Supermicro, Intel BMCs, and multiple firmware versions; the same field is in different paths, under OEM, or missing. Redpool fills in derived fields (e.g. PartNumber from Model, BaseSpeedMHz fallback), strips vendor-specific noise (e.g. HPE PartNumber padding), and builds consistent structures (e.g. MemorySummary, processor–DIMM links). So: **direct vs redpool goldens can look similar** when the mock data is already clean; use redpool in front of fishymetrics when scraping real, mixed-vendor BMCs.
+On a Dell PowerEdge R740, iDRAC identifies a memory module by a label such as `DIMM A1`. Redpool uses the model’s slot layout to fill in the missing `MemoryLocation`, so clients can identify the processor socket, memory channel, and slot. On Lenovo systems that repeat the chassis power total for each power supply, Redpool uses each supply’s own output reading when available. On HPE systems that report a PCIe slot type as `OCPSmall`, Redpool maps it to the Redfish value `OCP3Small` so clients can recognize the slot type.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ Redpool runs as a [mitmproxy](https://mitmproxy.org/) addon. Clients (like [fish
 
 ## Quick Start
 
-Git submodules for the collectors and exporters (`redfish-inventory-exporter`, `fishymetrics`, plus `third_party/pciids`) live in this tree. After clone, run `git submodule update --init --recursive`. `fixtures/` is a submodule too: [redpool-fixtures](https://github.com/asama-ai-labs/redpool-fixtures), captures of lab servers under CC0 1.0 (its `NOTICE.md` says which rights stay with the vendors). The same command fetches it. See [docs/FIXTURES.md](docs/FIXTURES.md), [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md), and the [schema validation report](docs/SCHEMA_VALIDATION.md). Redpool's own OEM extension is documented in [docs/REDPOOL_OEM_SCHEMA.md](docs/REDPOOL_OEM_SCHEMA.md).
+Git submodules for the collectors and exporters (`redfish-inventory-exporter`, `fishymetrics`, plus `third_party/pciids`) live in this tree. After clone, run `git submodule update --init --recursive`. `fixtures/` is a submodule too: [redpool-fixtures](https://github.com/asama-ai-labs/redpool-fixtures), captures of lab servers under CC0 1.0. The same command fetches it. See [docs/FIXTURES.md](docs/FIXTURES.md), [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md), and the [schema validation report](docs/SCHEMA_VALIDATION.md). Redpool's own OEM extension is documented in [docs/REDPOOL_OEM_SCHEMA.md](docs/REDPOOL_OEM_SCHEMA.md).
 
 ```bash
 # Install dependencies

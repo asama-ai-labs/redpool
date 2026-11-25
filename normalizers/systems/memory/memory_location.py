@@ -49,7 +49,7 @@ def generate_memory_location(
         Callable[[NormalizationContext, _MemoryLocationQuad], _MemoryLocationQuad]
     ] = None,
     locator: Optional[
-        Callable[[NormalizationContext], Optional[_MemoryLocationQuad]]
+        Callable[[NormalizationContext], Optional[Tuple[int, Optional[int], int, int]]]
     ] = None,
 ) -> Any:
     """Normalize or assemble ``MemoryLocation`` on ``ctx.data``.

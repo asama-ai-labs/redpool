@@ -227,8 +227,11 @@ def apply_prefetched_dell_memory_assembly_manufacture(
         rp["FruPartNumber"] = fru_part_number
 
 
-_MemoryLocationQuad = Tuple[int, int, int, int]
+_MemoryLocationQuad = Tuple[int, Optional[int], int, int]
 
+# Dell R630 Owner’s Manual, “System memory”: DIMM labels by socket and channel.
+# Redpool groups channels 0–1 and 2–3 under successive controller indices.
+# https://dl.dell.com/topicspdf/poweredge-r630_owners-manual_en-us.pdf
 _R630: Dict[str, _MemoryLocationQuad] = {
     "DIMM A1": (0, 0, 0, 0),
     "DIMM A5": (0, 0, 0, 1),
@@ -256,7 +259,9 @@ _R630: Dict[str, _MemoryLocationQuad] = {
     "DIMM B12": (1, 1, 3, 2),
 }
 
-# Channels 0-5 are socket-scoped (Dell Tech Guide); MC0 owns 0-2, MC1 owns 3-5.
+# Dell R740 Installation and Service Manual, “System memory”: socket-wide channels 0–5.
+# Redpool groups channels 0–2 under controller 0 and 3–5 under controller 1.
+# https://dl.dell.com/topicspdf/poweredge-r740_owners-manual_en-us.pdf
 _R740: Dict[str, _MemoryLocationQuad] = {
     "DIMM A1": (0, 0, 0, 0),
     "DIMM A7": (0, 0, 0, 1),
@@ -284,69 +289,90 @@ _R740: Dict[str, _MemoryLocationQuad] = {
     "DIMM B12": (1, 1, 5, 1),
 }
 
+# The Dell AMD service manuals identify the channel, but give no board-specific UMC ID.
+# Dell R6525 Installation and Service Manual, “System memory guidelines”, Table 1.
+# https://www.dell.com/support/manuals/en-us/poweredge-r6525/r6525_ism_pub/system-memory-guidelines?guid=guid-9e1fff44-fb33-4a66-8d3b-8c1410aa5088
+_R6525: Dict[str, _MemoryLocationQuad] = {
+    "DIMM A6": (0, None, 0, 0),
+    "DIMM A12": (0, None, 0, 1),
+    "DIMM A5": (0, None, 1, 0),
+    "DIMM A11": (0, None, 1, 1),
+    "DIMM A2": (0, None, 2, 0),
+    "DIMM A10": (0, None, 2, 1),
+    "DIMM A1": (0, None, 3, 0),
+    "DIMM A9": (0, None, 3, 1),
+    "DIMM A8": (0, None, 4, 0),
+    "DIMM A16": (0, None, 4, 1),
+    "DIMM A7": (0, None, 5, 0),
+    "DIMM A15": (0, None, 5, 1),
+    "DIMM A4": (0, None, 6, 0),
+    "DIMM A14": (0, None, 6, 1),
+    "DIMM A3": (0, None, 7, 0),
+    "DIMM A13": (0, None, 7, 1),
+    "DIMM B6": (1, None, 0, 0),
+    "DIMM B12": (1, None, 0, 1),
+    "DIMM B5": (1, None, 1, 0),
+    "DIMM B11": (1, None, 1, 1),
+    "DIMM B2": (1, None, 2, 0),
+    "DIMM B10": (1, None, 2, 1),
+    "DIMM B1": (1, None, 3, 0),
+    "DIMM B9": (1, None, 3, 1),
+    "DIMM B8": (1, None, 4, 0),
+    "DIMM B16": (1, None, 4, 1),
+    "DIMM B7": (1, None, 5, 0),
+    "DIMM B15": (1, None, 5, 1),
+    "DIMM B4": (1, None, 6, 0),
+    "DIMM B14": (1, None, 6, 1),
+    "DIMM B3": (1, None, 7, 0),
+    "DIMM B13": (1, None, 7, 1),
+}
+
+# R7525 shares the R6525 slot layout. Assume Dell channel letters match AMD's
+# Ethanol-X reference board (AMD 56873 rev. 0.70, Table 4).
+# https://www.abacus.cz/prilohy/_5100/5100789/AMD%20Memory%20Pupulation%20Guidelines%20for%20EPYC%207003%20Series%20Processors%2056873_0.70.pdf#page=20
+_R7525_UMC_BY_CHANNEL = (0, 1, 3, 2, 6, 7, 5, 4)
+# Dell R7525 Installation and Service Manual, “System memory guidelines”, supplies the DIMM pairs.
+# https://www.dell.com/support/manuals/en-us/poweredge-r7525/r7525_ism_pub/system-memory-guidelines?guid=guid-8665c17a-2613-45b2-9204-c02a89225024
 _R7525: Dict[str, _MemoryLocationQuad] = {
-    "DIMM A6": (0, 0, 0, 0),
-    "DIMM A12": (0, 0, 0, 1),
-    "DIMM A5": (0, 0, 1, 0),
-    "DIMM A11": (0, 0, 1, 1),
-    "DIMM A2": (0, 1, 2, 0),
-    "DIMM A10": (0, 1, 2, 1),
-    "DIMM A1": (0, 1, 3, 0),
-    "DIMM A9": (0, 1, 3, 1),
-    "DIMM A8": (0, 2, 4, 0),
-    "DIMM A16": (0, 2, 4, 1),
-    "DIMM A7": (0, 2, 5, 0),
-    "DIMM A15": (0, 2, 5, 1),
-    "DIMM A4": (0, 3, 6, 0),
-    "DIMM A14": (0, 3, 6, 1),
-    "DIMM A3": (0, 3, 7, 0),
-    "DIMM A13": (0, 3, 7, 1),
-    "DIMM B6": (1, 0, 0, 0),
-    "DIMM B12": (1, 0, 0, 1),
-    "DIMM B5": (1, 0, 1, 0),
-    "DIMM B11": (1, 0, 1, 1),
-    "DIMM B2": (1, 1, 2, 0),
-    "DIMM B10": (1, 1, 2, 1),
-    "DIMM B1": (1, 1, 3, 0),
-    "DIMM B9": (1, 1, 3, 1),
-    "DIMM B8": (1, 2, 4, 0),
-    "DIMM B16": (1, 2, 4, 1),
-    "DIMM B7": (1, 2, 5, 0),
-    "DIMM B15": (1, 2, 5, 1),
-    "DIMM B4": (1, 3, 6, 0),
-    "DIMM B14": (1, 3, 6, 1),
-    "DIMM B3": (1, 3, 7, 0),
-    "DIMM B13": (1, 3, 7, 1),
+    label: (socket, _R7525_UMC_BY_CHANNEL[channel], channel, slot)
+    for label, (socket, _, channel, slot) in _R6525.items()
 }
 
-# 12 channels, 1 DPC (Dell R7625 ISM). Channels are socket-scoped; MC = channel // 2.
+# Assume Dell R7625 channel letters match the AMD 9004 reference board
+# (AMD 58269, Table 1-1). MemoryController is the socket-local UMC instance.
+# 12 channels, 1 DPC (Dell R7625 ISM). Channels are socket-scoped.
+# https://www.dell.com/support/manuals/en-us/poweredge-r7625/per7625_ism_pub/system-memory-guidelines?guid=guid-4bbbd1fb-42ff-43b5-b333-b345fc568b76
+# https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/user-guides/amd-epyc-9004-ug-memory-population-recommendations.pdf
 _R7625: Dict[str, _MemoryLocationQuad] = {
-    "DIMM A1": (0, 0, 0, 0),
-    "DIMM A5": (0, 0, 1, 0),
-    "DIMM A3": (0, 1, 2, 0),
-    "DIMM A9": (0, 1, 3, 0),
-    "DIMM A7": (0, 2, 4, 0),
+    "DIMM A1": (0, 3, 0, 0),
+    "DIMM A5": (0, 4, 1, 0),
+    "DIMM A3": (0, 0, 2, 0),
+    "DIMM A9": (0, 5, 3, 0),
+    "DIMM A7": (0, 1, 4, 0),
     "DIMM A11": (0, 2, 5, 0),
-    "DIMM A2": (0, 3, 6, 0),
-    "DIMM A6": (0, 3, 7, 0),
-    "DIMM A4": (0, 4, 8, 0),
-    "DIMM A10": (0, 4, 9, 0),
-    "DIMM A8": (0, 5, 10, 0),
-    "DIMM A12": (0, 5, 11, 0),
-    "DIMM B1": (1, 0, 0, 0),
-    "DIMM B5": (1, 0, 1, 0),
-    "DIMM B3": (1, 1, 2, 0),
-    "DIMM B9": (1, 1, 3, 0),
-    "DIMM B7": (1, 2, 4, 0),
+    "DIMM A2": (0, 9, 6, 0),
+    "DIMM A6": (0, 10, 7, 0),
+    "DIMM A4": (0, 6, 8, 0),
+    "DIMM A10": (0, 11, 9, 0),
+    "DIMM A8": (0, 7, 10, 0),
+    "DIMM A12": (0, 8, 11, 0),
+    "DIMM B1": (1, 3, 0, 0),
+    "DIMM B5": (1, 4, 1, 0),
+    "DIMM B3": (1, 0, 2, 0),
+    "DIMM B9": (1, 5, 3, 0),
+    "DIMM B7": (1, 1, 4, 0),
     "DIMM B11": (1, 2, 5, 0),
-    "DIMM B2": (1, 3, 6, 0),
-    "DIMM B6": (1, 3, 7, 0),
-    "DIMM B4": (1, 4, 8, 0),
-    "DIMM B10": (1, 4, 9, 0),
-    "DIMM B8": (1, 5, 10, 0),
-    "DIMM B12": (1, 5, 11, 0),
+    "DIMM B2": (1, 9, 6, 0),
+    "DIMM B6": (1, 10, 7, 0),
+    "DIMM B4": (1, 6, 8, 0),
+    "DIMM B10": (1, 11, 9, 0),
+    "DIMM B8": (1, 7, 10, 0),
+    "DIMM B12": (1, 8, 11, 0),
 }
 
+# Dell R760 Installation and Service Manual, “System memory guidelines”: DIMM pairs on channels A–H.
+# Redpool numbers A–H as 0–7 and groups successive pairs of channels under one controller.
+# https://www.dell.com/support/manuals/en-us/poweredge-r760/per760_ism_pub/system-memory-guidelines?guid=guid-9e0a4930-18e6-42b3-ac7f-6a770388c9e2
 _R760: Dict[str, _MemoryLocationQuad] = {
     "DIMM A1": (0, 0, 0, 0),
     "DIMM A9": (0, 0, 0, 1),
@@ -386,7 +412,7 @@ _LOCATOR_MAP: Dict[tuple[str, str], Dict[str, _MemoryLocationQuad]] = {
     ("dell", "poweredger630"): _R630,
     ("dell", "poweredger740"): _R740,
     # R6525 ISM uses the same 8-channel 2-DPC silk as R7525.
-    ("dell", "poweredger6525"): _R7525,
+    ("dell", "poweredger6525"): _R6525,
     ("dell", "poweredger7525"): _R7525,
     ("dell", "poweredger760"): _R760,
     ("dell", "poweredger7625"): _R7625,

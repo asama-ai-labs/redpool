@@ -98,7 +98,7 @@ def _memory_location(ctx: NormalizationContext):
 _HPE_BODY = {
     "MemoryLocation": {"Socket": 2, "MemoryController": 3, "Channel": 2, "Slot": 9}
 }
-_HPE_RESULT = {"Socket": 1, "MemoryController": 0, "Channel": 1, "Slot": 0}
+_HPE_RESULT = {"Socket": 1, "MemoryController": 0, "Channel": 1, "Slot": 1}
 
 
 def test_memory_location_routes_through_registered_vendor_normalizer() -> None:
