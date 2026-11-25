@@ -6,7 +6,9 @@ A transparent MITM proxy that normalizes Redfish BMC responses across vendors (D
 
 Every server vendor implements the Redfish API differently. The same logical field (e.g., processor speed) lives in different paths, uses different names, or is missing entirely depending on the vendor and firmware version. Redpool sits transparently in front of BMCs and normalizes responses so downstream tools (Prometheus exporters, inventory systems, monitoring dashboards, MCP servers etc) don't need per-vendor logic.
 
-On a Dell PowerEdge R740, iDRAC identifies a memory module by a label such as `DIMM A1`. Redpool uses the model’s slot layout to fill in the missing `MemoryLocation`, so clients can identify the processor socket, memory channel, and slot. On Lenovo systems that repeat the chassis power total for each power supply, Redpool uses each supply’s own output reading when available. On HPE systems that report a PCIe slot type as `OCPSmall`, Redpool maps it to the Redfish value `OCP3Small` so clients can recognize the slot type.
+In a ThinkSystem SR680a V3 capture, the direct scrape reports the same 2,285 W chassis total for all eight power supplies. Summing those readings gives 18.3 kW. Through Redpool, the eight individual readings add up to about 2.3 kW. On an Intel M50CYP2SBSTD, the direct scrape fails and returns two metric series. Through Redpool, the scrape succeeds and returns 151, including readings from six fans and 36 temperature sensors. On an HPE ProLiant DL385 Gen10 Plus, the direct scrape misses the Smart Array controller, its two drives, and four network ports. All seven appear in the scrape through Redpool.
+
+See the [inventory exporter comparison](docs/REDFISH_INVENTORY_EXPORTER_DIRECT_VS_REDPOOL.md) and the [fishymetrics comparison](docs/FISHYMETRICS_DIRECT_VS_REDPOOL.md) for more examples.
 
 ## Architecture
 
