@@ -30,13 +30,16 @@ SCHEMA_ID = (
     "https://github.com/asama-ai-labs/redpool/schemas/json-schema/Redpool.v1_0_0.json"
 )
 SHARED_NESTED = {"HpeSmartStorage"}
-# Battery fields are not in the captures yet, but the normalizer and the collector use them.
+# Fields supported by the schema even when absent from the current captures.
 KNOWN_EXTRA = {
     "HpeSmartStorage": {
         "ChargeLevelPercent": {"number"},
         "MaximumCapWatts": {"number"},
         "RemainingChargeTimeSeconds": {"number"},
     },
+    "RedpoolBios": {"BypassBIOSPwFlag": {"boolean"}},
+    "RedpoolLogEntry": {"TotalSequenceNumber": {"string"}},
+    "RedpoolNetworkAdapter": {"Location": {"string"}},
 }
 DESCRIPTION = "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
 
@@ -113,6 +116,11 @@ def build() -> dict:
             "properties": dict(sorted(merged.items())),
             "additionalProperties": False,
         }
+
+    for owner, fields in KNOWN_EXTRA.items():
+        if owner not in SHARED_NESTED:
+            for key, types in fields.items():
+                owners[owner][key].update(types)
 
     for owner, props in owners.items():
         resource = owner.removeprefix("Redpool")

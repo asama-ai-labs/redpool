@@ -181,6 +181,10 @@
           "type": "string",
           "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
         },
+        "IDSDMRollupStatus": {
+          "type": "string",
+          "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."
+        },
         "IntrusionRollupStatus": {
           "type": "string",
           "description": "Value normalized into Oem.Redpool. It is not defined by DMTF; see docs/REDPOOL_OEM_SCHEMA.md."

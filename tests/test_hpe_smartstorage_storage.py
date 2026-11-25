@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -15,9 +16,13 @@ from redpool.schema_validator import validate_document
 from scripts.mockup_server import mockup_redfish_client
 
 
-def _proxy_request(path: str, model: str = "ProLiant_DL380_Gen10_2") -> dict:
-    repo = Path(__file__).resolve().parent.parent
-    model_dir = repo / "fixtures" / "HPE" / model
+def _proxy_request(
+    path: str,
+    model: str = "ProLiant_DL380_Gen10_2",
+    *,
+    fixtures: Path = Path(__file__).resolve().parent.parent / "fixtures",
+) -> dict:
+    model_dir = fixtures / "HPE" / model
     if not (model_dir / "original").is_dir():
         pytest.skip(f"HPE {model} fixture is unavailable")
     proxy = RedfishProxy()
@@ -112,39 +117,6 @@ class TestHPESmartStorageNormalization(unittest.TestCase):
         self.assertEqual(battery["SparePartNumber"], "878643-001")
         self.assertEqual(battery["Status"]["Health"], "OK")
 
-    @pytest.mark.requires_fixtures
-    def test_native_volumes_missing_from_logical_drives_are_kept(self) -> None:
-        collection = _proxy_request(
-            "/redfish/v1/Systems/1/Storage/0/Volumes",
-            model="ProLiant_DL380_Gen10",
-        )
-        self.assertEqual(
-            [
-                member["@odata.id"].rsplit("/", 1)[-1]
-                for member in collection["Members"]
-            ],
-            ["1", "65", "69", "81", "85", "89", "93"],
-        )
-
-        logical = _proxy_request(
-            "/redfish/v1/Systems/1/Storage/0/Volumes/1",
-            model="ProLiant_DL380_Gen10",
-        )
-        self.assertEqual(logical["RAIDType"], "RAID1")
-
-        native = _proxy_request(
-            "/redfish/v1/Systems/1/Storage/0/Volumes/65",
-            model="ProLiant_DL380_Gen10",
-        )
-        self.assertEqual(native["@odata.type"], "#Volume.v1_10_0.Volume")
-        self.assertEqual(native["Id"], "65")
-        self.assertEqual(native["RAIDType"], "None")
-        self.assertEqual(native["CapacityBytes"], 1600321314816)
-        self.assertEqual(
-            native["Links"]["Drives"],
-            [{"@odata.id": "/redfish/v1/Systems/1/Storage/0/Drives/0"}],
-        )
-
     def test_hpe_array_controller_serial_number_trimmed(self) -> None:
         import logging
 
@@ -237,3 +209,62 @@ def test_hpe_logical_drive_volume_has_no_volume_type() -> None:
     assert "VolumeType" not in body
     result = validate_document(body)
     assert result.status == "valid", result.issues
+
+
+def test_native_volumes_missing_from_logical_drives_are_kept(tmp_path):
+    model = "ProLiant_DL380_Gen10"
+    original = tmp_path / "HPE" / model / "original"
+    system = "/redfish/v1/Systems/1"
+    smart = f"{system}/SmartStorage"
+    array = f"{smart}/ArrayControllers/0"
+    native = f"{system}/Storage/native"
+    resources = {
+        "/redfish/v1": {"@odata.id": "/redfish/v1"},
+        smart: {"@odata.id": smart},
+        array: {"@odata.id": array, "Id": "0", "Model": "Test Array Controller"},
+        f"{array}/LogicalDrives": {
+            "Members": [{"@odata.id": f"{array}/LogicalDrives/1"}],
+        },
+        f"{array}/LogicalDrives/1": {
+            "@odata.id": f"{array}/LogicalDrives/1",
+            "@odata.type": "#HpeSmartStorageLogicalDrive.v2_0_0.HpeSmartStorageLogicalDrive",
+            "Id": "1",
+            "LogicalDriveName": "Test logical drive",
+            "Raid": "RAID1",
+        },
+        f"{system}/Storage": {"Members": [{"@odata.id": native}]},
+        native: {"@odata.id": native, "Name": "Test Array Controller"},
+        f"{native}/Volumes": {
+            "Members": [{"@odata.id": f"{native}/Volumes/{i}"} for i in ("1", "65")],
+        },
+        f"{native}/Volumes/65": {
+            "@odata.id": f"{native}/Volumes/65",
+            "@odata.type": "#Volume.v1_0_0.Volume",
+            "Id": "65",
+            "Name": "Test native volume",
+            "RAIDType": "None",
+            "CapacityBytes": 1_000_000,
+            "Links": {"Drives": [{"@odata.id": f"{native}/Drives/0"}]},
+        },
+    }
+    for uri, body in resources.items():
+        path = original / uri.lstrip("/") / "index.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(body), encoding="utf-8")
+
+    volumes = f"{system}/Storage/0/Volumes"
+    collection = _proxy_request(volumes, model, fixtures=tmp_path)
+    assert collection["Members"] == [
+        {"@odata.id": f"{volumes}/1"},
+        {"@odata.id": f"{volumes}/65"},
+    ]
+
+    logical = _proxy_request(f"{volumes}/1", model, fixtures=tmp_path)
+    assert logical["RAIDType"] == "RAID1"
+
+    volume = _proxy_request(f"{volumes}/65", model, fixtures=tmp_path)
+    assert volume["@odata.type"] == "#Volume.v1_10_0.Volume"
+    assert volume["@odata.id"] == f"{volumes}/65"
+    assert volume["RAIDType"] == "None"
+    assert volume["CapacityBytes"] == 1_000_000
+    assert volume["Links"]["Drives"] == [{"@odata.id": f"{system}/Storage/0/Drives/0"}]
