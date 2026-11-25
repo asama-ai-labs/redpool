@@ -4,7 +4,9 @@ All notable changes to Redpool are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
-Redpool has not published a release, so nothing below is a breaking change against one. Entries that change behavior from earlier pre-release code say so in their text.
+## [1.0.0] - 2026-11-25
+
+First public release of Redpool.
 
 ### Added
 - CI validates every normalized fixture against the pinned DMTF schemas with `validate_redfish_schema.py --strict`. It fails on an invalid document or a DMTF type newer than the bundle, and prints a report of deprecated schemas and properties still in use.
@@ -52,6 +54,8 @@ Redpool has not published a release, so nothing below is a breaking change again
 - The README no longer describes a publishing workflow that this repository does not contain.
 
 ### Fixed
+- Corrected DIMM location mappings for Dell PowerEdge, HPE ProLiant, and Lenovo ThinkSystem models, and regenerated the normalized fixtures and Prometheus golden files.
+- The Docker publish workflow retries signing when GHCR temporarily fails to serve the pushed image digest.
 - PCI `DeviceClass` is mapped from the PCI base class using DMTF names. 0x10 is `EncryptionController` (it was the non-DMTF `CoprocessorController`). Added 0x0E to 0x13 and 0x40 `Coprocessor`, and 0xFF is `UnassignedClass`.
 - `Status.State` is no longer set to `Unknown`, which is not a valid value. When processors report different states, `ProcessorSummary.Status.State` is omitted. An HPE DIMM whose `DIMMStatus` is `Unknown` is left unmapped, where it was mapped to `OK`/`Enabled` with an invalid `HealthRollup`.
 - Drives no longer get an empty `Location: []` when the BMC does not send one. `Location` is deprecated in favor of `PhysicalLocation` and is passed through only when sent.
